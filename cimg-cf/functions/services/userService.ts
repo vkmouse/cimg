@@ -52,6 +52,12 @@ export async function getFirst(db: D1Database): Promise<UserDto | null> {
   return row ? toDto(row) : null
 }
 
+/** 依 email 取得未刪除的使用者。 */
+export async function getByEmail(db: D1Database, email: string): Promise<UserDto | null> {
+  const row = await userRepository.getByEmail(db, email)
+  return row ? toDto(row) : null
+}
+
 /**
  * 處理 entityType=USR 的寫入：entityId 即為 users.id（也就是這個使用者自己的 id）。
  * baseVersion === 0 視為新建；否則視為更新，必須版本吻合且欄位真的有變化。

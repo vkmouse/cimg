@@ -14,8 +14,8 @@ export async function fetchMe(): Promise<{ userId: string }> {
 /**
  * 取得目前使用者的 S3 暫時憑證與 bucket 設定
  */
-export async function fetchAppConfig(userId: string): Promise<AppConfig> {
-  const res = await fetch(`/api/config?userId=${encodeURIComponent(userId)}`);
+export async function fetchAppConfig(): Promise<AppConfig> {
+  const res = await fetch(`/api/config`);
   if (!res.ok) {
     throw new Error(`無法取得設定（${res.status}）`);
   }
@@ -25,8 +25,8 @@ export async function fetchAppConfig(userId: string): Promise<AppConfig> {
 /**
  * 取得照片清單（僅含 metadata，不含實際圖片網址）
  */
-export async function fetchPhotoItems(userId: string): Promise<PhotoItem[]> {
-  const res = await fetch(`/api/photos?userId=${encodeURIComponent(userId)}`);
+export async function fetchPhotoItems(): Promise<PhotoItem[]> {
+  const res = await fetch(`/api/photos`);
   if (!res.ok) {
     throw new Error(`無法取得照片清單（${res.status}）`);
   }

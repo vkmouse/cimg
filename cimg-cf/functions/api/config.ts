@@ -1,15 +1,11 @@
 import type { AppConfig } from '../../src/types'
-import type { Env } from '../types'
+import type { AuthContext, Env } from '../types'
 import * as credentialService from '../services/credentialService'
 import * as bucketService from '../services/bucketService'
 
-export const onRequest: PagesFunction<Env> = async (context) => {
+export const onRequest: PagesFunction<Env, any, AuthContext> = async (context) => {
   const { DB } = context.env
-
-  const userId = new URL(context.request.url).searchParams.get('userId')
-  if (!userId) {
-    return Response.json({ error: 'Missing userId' }, { status: 400 })
-  }
+  const { userId } = context.data
 
   try {
     const [credential, bucket] = await Promise.all([

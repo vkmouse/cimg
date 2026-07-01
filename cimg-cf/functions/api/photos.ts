@@ -1,13 +1,9 @@
-import type { Env } from '../types'
+import type { AuthContext, Env } from '../types'
 import * as photoService from '../services/photoService'
 
-export const onRequest: PagesFunction<Env> = async (context) => {
+export const onRequest: PagesFunction<Env, any, AuthContext> = async (context) => {
   const { DB } = context.env
-
-  const userId = new URL(context.request.url).searchParams.get('userId')
-  if (!userId) {
-    return Response.json({ error: 'Missing userId' }, { status: 400 })
-  }
+  const { userId } = context.data
 
   try {
     const photos = await photoService.getListByUserId(DB, userId)

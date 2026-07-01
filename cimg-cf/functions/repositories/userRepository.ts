@@ -19,6 +19,15 @@ export async function getFirst(db: D1Database): Promise<UserRow | null> {
   return row ?? null
 }
 
+/** 依 email 取得未刪除的使用者。 */
+export async function getByEmail(db: D1Database, email: string): Promise<UserRow | null> {
+  const row = await db
+    .prepare(`SELECT * FROM users WHERE email = ? AND is_deleted = 0 LIMIT 1`)
+    .bind(email)
+    .first<UserRow>()
+  return row ?? null
+}
+
 export async function insert(
   db: D1Database,
   id: string,

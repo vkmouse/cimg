@@ -4,6 +4,18 @@
  */
 export interface Env {
   DB: D1Database
+  POLICY_AUD?: string
+  TEAM_DOMAIN?: string
+}
+
+/**
+ * _middleware.ts 驗證後注入 context.data 的型別。
+ * email：來自 Cloudflare Access JWT 或 fallback demo email。
+ * userId：由 middleware 以 email 查詢 DB 後取得的 users.id。
+ */
+export interface AuthContext extends Record<string, unknown> {
+  email: string
+  userId: string
 }
 
 /**

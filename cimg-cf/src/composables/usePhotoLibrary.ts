@@ -16,8 +16,8 @@ export function usePhotoLibrary() {
     error.value = null;
 
     try {
-      const { userId } = await fetchMe();
-      const [config, photos] = await Promise.all([fetchAppConfig(userId), fetchPhotoItems(userId)]);
+      await fetchMe();
+      const [config, photos] = await Promise.all([fetchAppConfig(), fetchPhotoItems()])
       photoUrls.value = await resolvePhotoThumbnailUrls(config, photos);
     } catch (err) {
       error.value = err instanceof Error ? err.message : String(err);
