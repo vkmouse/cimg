@@ -30,6 +30,12 @@ pub struct Config {
     pub sync_url: String,
     /// 本機資料目錄（sqlite 資料庫、webview 的 cookie/cache 都放在這底下）。
     pub data_dir: PathBuf,
+    /// Cloudflare Access Service Token 的 Client ID，`--sync` 打 `/api/rs/sync`
+    /// 時帶在 `CF-Access-Client-Id` header，用來通過該路徑獨立的 Service Auth 驗證
+    /// （跟前台 webview 登入用的 email 驗證完全無關）。
+    pub cf_access_client_id: String,
+    /// 對應上面 Service Token 的 Client Secret，帶在 `CF-Access-Client-Secret` header。
+    pub cf_access_client_secret: String,
 }
 
 impl Config {
@@ -46,6 +52,8 @@ impl Config {
         let get_bucket_info_api_url = require_env("CIMG_GET_BUCKET_INFO_API_URL", &mut missing);
         let sync_url = require_env("SYNC_URL", &mut missing);
         let data_dir = require_env("DATA_DIR", &mut missing);
+        let cf_access_client_id = require_env("CF_ACCESS_CLIENT_ID", &mut missing);
+        let cf_access_client_secret = require_env("CF_ACCESS_CLIENT_SECRET", &mut missing);
 
         if !missing.is_empty() {
             eprintln!("[config] 啟動失敗，缺少下列環境變數：");
@@ -64,6 +72,8 @@ impl Config {
             get_bucket_info_api_url: get_bucket_info_api_url.unwrap(),
             sync_url: sync_url.unwrap(),
             data_dir: PathBuf::from(data_dir.unwrap()),
+            cf_access_client_id: cf_access_client_id.unwrap(),
+            cf_access_client_secret: cf_access_client_secret.unwrap(),
         }
     }
 }

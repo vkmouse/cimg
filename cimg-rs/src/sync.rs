@@ -83,7 +83,17 @@ struct PullEvent {
 }
 
 /// `--sync` 的主入口：讀取 queue → POST → LOG。
-pub fn run(sync_url: &str, db_path: &std::path::Path) -> Result<(), Box<dyn std::error::Error>> {
+///
+/// `config` 除了 `sync_url` 之外，也提供 `cf_access_client_id` /
+/// `cf_access_client_secret`，用來通過 `/api/rs/sync` 獨立的 Cloudflare Access
+/// Service Auth 驗證（跟前台 webview 登入用的 email 驗證完全無關，見
+/// cimg-cf 的 `functions/api/rs/_middleware.ts`）。
+pub fn run(
+    config: &crate::config::Config,
+    db_path: &std::path::Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let sync_url = config.sync_url.as_str();
+
     let db = Database::open(db_path)?;
     let pending = db.load_pending_mutations()?;
 
@@ -123,8 +133,14 @@ pub fn run(sync_url: &str, db_path: &std::path::Path) -> Result<(), Box<dyn std:
         last_cursor,
     };
 
+    // CF-Access-Client-Id / CF-Access-Client-Secret：Cloudflare Access 邊緣層
+    // 會先驗證這兩個 header 對應到 /api/rs/* 那個 Application 底下的 Service
+    // Token，驗證通過才會放行並附上 Cf-Access-Jwt-Assertion 給後端。
+    // 這一步是機器對機器的獨立驗證，跟前台 webview 用 email 登入無關。
     let response = ureq::post(sync_url)
         .set("Content-Type", "application/json")
+        .set("CF-Access-Client-Id", &config.cf_access_client_id)
+        .set("CF-Access-Client-Secret", &config.cf_access_client_secret)
         .send_json(serde_json::to_value(&body)?)?;
 
     let resp_body: SyncResponseBody = response.into_json()?;

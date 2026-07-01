@@ -60,7 +60,7 @@ pub fn run() -> wry::Result<()> {
     // `SYNC_URL` 環境變數讀。
     if has_flag("--sync") {
         println!("[app] --sync 模式,跳過 webview 登入流程");
-        if let Err(e) = crate::sync::run(&config.sync_url, &db_path) {
+        if let Err(e) = crate::sync::run(&config, &db_path) {
             eprintln!("[sync] 錯誤: {e}");
             std::process::exit(1);
         }

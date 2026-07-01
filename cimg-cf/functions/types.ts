@@ -6,6 +6,15 @@ export interface Env {
   DB: D1Database
   POLICY_AUD?: string
   TEAM_DOMAIN?: string
+  /**
+   * `/api/rs/*` 專用的獨立驗證設定（見 functions/api/rs/_middleware.ts）。
+   * 與上面 POLICY_AUD（前台 email 登入用）完全分開，對應 Cloudflare Access
+   * 另一個只掛 Service Auth policy 的 Application。這是單純的 server-to-server
+   * 驗證（cimg-rs → cimg-cf），不綁定任何使用者身份。
+   */
+  RS_POLICY_AUD?: string
+  /** 選填：額外比對 JWT 的 client_id claim，確保用的是預期的那組 Service Token。 */
+  RS_SERVICE_CLIENT_ID?: string
 }
 
 /**
