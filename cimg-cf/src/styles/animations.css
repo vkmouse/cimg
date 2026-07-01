@@ -1,0 +1,30 @@
+/**
+ * 共用動畫定義
+ */
+
+/* 縮圖載入完成時的淡入 */
+@keyframes photo-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* 骨架屏 shimmer 掃光效果 */
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+/* loading 轉圈 */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

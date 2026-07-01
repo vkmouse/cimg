@@ -1,0 +1,150 @@
+export interface Photo {
+  id: string
+  url: string
+}
+
+export interface PhotoItem {
+  imageId: string
+  sourceDevice: string
+  datePath: string
+}
+
+export interface BucketConfig {
+  bucket: string | null
+  keybase: string | null
+}
+
+export interface AppConfig {
+  user: {
+    credentials: {
+      accessKeyId: string | null
+      expiration: number | null
+      secretAccessKey: string | null
+      sessionToken: string | null
+    }
+  }
+  bucketInfo: {
+    region: string | null
+    exif: BucketConfig
+    expandExif: BucketConfig
+    expandOriginal: BucketConfig
+    extraLarge: BucketConfig
+    middle: BucketConfig
+    original: BucketConfig
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Sync API (POST /api/rs/sync)                                               */
+/* -------------------------------------------------------------------------- */
+
+/** 對應 sync_events.entity_type，以及 entityType 的 Service 派送 Map（action 目前只有 PUT 一種，已省略不傳）。 */
+export type EntityType = 'BKT' | 'USR' | 'PHT' | 'CRD'
+
+export interface PushCommand {
+  mutationId: string
+  entityType: EntityType
+  entityId: string
+  baseVersion: number
+  /** JSON 字串，內容為 snake_case 欄位（與 sync_queue.payload 格式一致）。 */
+  payload: string
+}
+
+export type PushResultStatus = 'OK' | 'ERROR' | 'SKIPPED'
+
+export interface PushResult {
+  mutationId: string
+  status: PushResultStatus
+}
+
+export interface SyncRequestBody {
+  pushCommands: PushCommand[]
+  /** client 上次同步記下的 sync_events.id 游標；用來計算這次 pull 的範圍（id > lastCursor）。 */
+  lastCursor: number
+}
+
+/** Pull 流程回傳的單一筆伺服器端新事件，欄位皆為 camelCase（payload 內容仍是 JSON 字串，格式與 PushCommand.payload 相同）。 */
+export interface PullEvent {
+  id: number
+  mutationId: string
+  entityType: EntityType
+  entityId: string
+  version: number
+  payload: string | null
+}
+
+export interface SyncResponseBody {
+  pushResults: PushResult[]
+  /** 目前 sync_events 表格的最大 id，client 收到後應存起來，下次同步當作 lastCursor 帶回來。 */
+  newCursor: number
+  /** lastCursor 之後、且排除本次請求自己 push 上來的 mutationId 的所有新事件。 */
+  pullEvents: PullEvent[]
+}
+
+/**
+ * 各 entityType 對應的 payload 內容（JSON.parse(PushCommand.payload) 後的形狀）。
+ * 欄位名稱為 snake_case，與 sync_queue.payload 及 DB 欄位名稱一致。
+ *
+ * 注意：
+ * - id / image_id 等 PK 由 PushCommand.entityId 提供，payload 裡的同名欄位
+ *   僅供參考，各 Service 使用 entityId。
+ * - version 由 server 依 baseVersion 計算。
+ * - user_id 視為普通業務欄位，不特殊處理（USR 的 entityId 本身就是 user id）。
+ */
+export interface UserPayload {
+  email: string
+  is_deleted: number | boolean
+  /** USR 的 user_id 即為 id 本身，存在 payload 裡供一致性參考。 */
+  id?: string
+}
+
+export interface CredentialPayload {
+  user_id: string
+  access_key_id: string
+  expiration: number
+  secret_access_key: string
+  session_token: string
+  is_deleted: number | boolean
+}
+
+export interface BucketPayload {
+  user_id: string
+  region: string
+  exif_bucket: string
+  exif_keybase: string
+  expand_exif_bucket: string
+  expand_exif_keybase: string
+  expand_original_bucket: string
+  expand_original_keybase: string
+  extra_large_bucket: string
+  extra_large_keybase: string
+  middle_bucket: string
+  middle_keybase: string
+  original_bucket: string
+  original_keybase: string
+  is_deleted: number | boolean
+}
+
+export interface PhotoPayload {
+  user_id: string
+  source_device: string
+  date_path: string
+  shooting_date: string | null
+  uploaded_date: string | null
+  shooting_camera: string | null
+  image_size: string | null
+  file_size: string | null
+  file_format: string | null
+  shutter_speed: string | null
+  aperture_value: string | null
+  iso_speed: string | null
+  lens_focal_length: string | null
+  white_balance_mode: string | null
+  exposure_compensation: string | null
+  flash_firing: string | null
+  lens: string | null
+  subject_category: string | null
+  blur_judgement: string | null
+  exposure_judgement: string | null
+  is_deleted: number | boolean
+}

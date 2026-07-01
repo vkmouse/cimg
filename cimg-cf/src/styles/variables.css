@@ -1,0 +1,41 @@
+/**
+ * Design tokens — iOS 16+ 深色模式語意色彩規範
+ * 所有顏色 / 間距 / 動效時間請優先引用這裡的變數，避免在元件內 hardcode。
+ */
+:root {
+  /* ---- 背景層級（依海拔由低到高） ---- */
+  --bg-base: #000000;           /* 頁面底色 */
+  --bg-elevated: #1c1c1e;       /* 卡片、骨架屏底色（systemGray6 dark） */
+  --bg-elevated-2: #2c2c2e;     /* 骨架屏 shimmer 高光層（systemGray5 dark） */
+
+  /* ---- 文字 ---- */
+  --label-primary: #ffffff;
+  --label-secondary: rgba(255, 255, 255, 0.6);
+  --label-tertiary: rgba(255, 255, 255, 0.3);
+
+  /* ---- 分隔線 / 邊框 ---- */
+  --separator: rgba(255, 255, 255, 0.08);
+
+  /* ---- 系統強調色 ---- */
+  --accent: #0a84ff;            /* iOS systemBlue dark */
+  --danger: #ff453a;            /* iOS systemRed dark */
+
+  /* ---- 間距 ---- */
+  --grid-gap: 2px;
+  --header-padding-top: 52px;
+  --header-padding-x: 16px;
+  --header-padding-bottom: 8px;
+
+  /* ---- 字級（對齊 iOS Large Title / Footnote 規格） ---- */
+  --font-title: 34px;
+  --font-body: 15px;
+  --font-caption: 13px;
+
+  /* ---- 圓角 ---- */
+  --radius-sm: 6px;
+
+  /* ---- 動效時間 ---- */
+  --ease-standard: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --duration-fast: 0.2s;
+  --duration-medium: 0.4s;
+}
