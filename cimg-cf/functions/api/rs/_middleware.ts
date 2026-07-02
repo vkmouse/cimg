@@ -57,7 +57,11 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     if (env.RS_SERVICE_CLIENT_ID) {
       const clientId = payload.client_id
       if (clientId !== env.RS_SERVICE_CLIENT_ID) {
-        console.error('[rs-auth] client_id 不符合預期')
+        // 除錯用：把兩邊的值都印出來方便比對是不是複製貼上時漏字/多空白。
+        // 這兩個值都是 client_id（公開識別碼，不是 secret），印出來沒有洩漏風險。
+        console.error(
+          `[rs-auth] client_id 不符合預期，JWT 裡的是 "${String(clientId)}"，env.RS_SERVICE_CLIENT_ID 是 "${env.RS_SERVICE_CLIENT_ID}"`
+        )
         return new Response('Unauthorized', { status: 401 })
       }
     }
