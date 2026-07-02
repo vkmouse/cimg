@@ -82,17 +82,60 @@ struct PullEvent {
     payload: Option<String>,
 }
 
-/// `--sync` 的主入口：讀取 queue → POST → LOG。
+/// 對應 CF `POST /api/rs/initdb` 的回應。
+#[derive(serde::Deserialize, Debug)]
+struct InitDbResponse {
+    success: bool,
+    #[serde(default)]
+    message: Option<String>,
+    #[serde(default)]
+    error: Option<String>,
+}
+
+/// push 之前先確保 CF 端的 D1 schema 已經建立(冪等的
+/// `CREATE TABLE IF NOT EXISTS`)。失敗就直接回傳 `Err`,呼叫端 (`run`) 會
+/// 中止整個 sync,不繼續 push——schema 都不確定存在的情況下繼續 push
+/// 沒有意義,一定會全部失敗。
+fn call_initdb(config: &crate::config::Config) -> Result<(), Box<dyn std::error::Error>> {
+    let initdb_url = config.initdb_url();
+    println!("[sync] 呼叫 initdb 確保 CF 端 schema 已建立: {initdb_url}");
+
+    let response = ureq::post(&initdb_url)
+        .set("CF-Access-Client-Id", &config.cf_access_client_id)
+        .set("CF-Access-Client-Secret", &config.cf_access_client_secret)
+        .call()?;
+
+    let body: InitDbResponse = response.into_json()?;
+    if !body.success {
+        return Err(format!(
+            "[initdb] CF 回應 success=false: {}",
+            body.error.unwrap_or_default()
+        )
+        .into());
+    }
+
+    println!(
+        "[sync] initdb 完成: {}",
+        body.message.unwrap_or_default()
+    );
+    Ok(())
+}
+
+/// `--sync` 的主入口：initdb → 讀取 queue → POST → LOG。
 ///
-/// `config` 除了 `sync_url` 之外，也提供 `cf_access_client_id` /
-/// `cf_access_client_secret`，用來通過 `/api/rs/sync` 獨立的 Cloudflare Access
+/// `config` 除了 `cf_base_url` 之外，也提供 `cf_access_client_id` /
+/// `cf_access_client_secret`，用來通過 `/api/rs/*` 獨立的 Cloudflare Access
 /// Service Auth 驗證（跟前台 webview 登入用的 email 驗證完全無關，見
-/// cimg-cf 的 `functions/api/rs/_middleware.ts`）。
+/// cimg-cf 的 `functions/_middleware.ts`）。
 pub fn run(
     config: &crate::config::Config,
     db_path: &std::path::Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let sync_url = config.sync_url.as_str();
+    // Step 0: 先確保 CF 端 D1 schema 已建立,失敗就直接中止,不繼續 push。
+    call_initdb(config)?;
+
+    let sync_url = config.sync_url();
+    let sync_url = sync_url.as_str();
 
     let db = Database::open(db_path)?;
     let pending = db.load_pending_mutations()?;

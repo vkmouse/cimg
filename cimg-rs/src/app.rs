@@ -20,7 +20,7 @@ const CHROME_USER_AGENT: &str =
 
 /// 檢查命令列參數是否包含指定的 boolean flag（例如 `--sync`）。
 /// 只認完全相等的參數字串，不支援 `--sync=xxx` 這種寫法——`--sync` 本身
-/// 不帶值，值一律從 `SYNC_URL` 環境變數讀。
+/// 不帶值，值一律從 `CF_BASE_URL` 環境變數讀。
 fn has_flag(flag: &str) -> bool {
     std::env::args().any(|arg| arg == flag)
 }
@@ -57,7 +57,7 @@ pub fn run() -> wry::Result<()> {
     let db_path = data_dir.join("cimg.sqlite3");
 
     // --sync 有帶就走純 sync 流程,不開 window / webview,目標網址從
-    // `SYNC_URL` 環境變數讀。
+    // `CF_BASE_URL` 組出(見 `Config::sync_url()` / `Config::initdb_url()`)。
     if has_flag("--sync") {
         println!("[app] --sync 模式,跳過 webview 登入流程");
         if let Err(e) = crate::sync::run(&config, &db_path) {

@@ -1,7 +1,7 @@
-import type { Env } from '../types'
+import type { Env } from '../../types'
 
 export const onRequest: PagesFunction<Env> = async (context) => {
-  if (context.request.method !== 'GET') {
+  if (context.request.method !== 'POST') {
     return new Response('Method Not Allowed', { status: 405 })
   }
 

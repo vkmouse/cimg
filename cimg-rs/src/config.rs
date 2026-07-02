@@ -5,7 +5,7 @@
 //! 第一個缺的就中斷、使用者補一個、重跑、再抓到下一個缺的。
 //!
 //! 不分「一般模式」/「--sync 模式」個別檢查：所有變數啟動當下一律要求
-//! 齊全，即使當次執行用不到（例如一般模式用不到 `SYNC_URL`）。這樣心智
+//! 齊全，即使當次執行用不到（例如一般模式用不到 `CF_BASE_URL`）。這樣心智
 //! 模型最單純：「這支程式要跑，環境變數就要備齊」，不用去記哪個模式需要
 //! 哪幾個子集合。
 
@@ -26,8 +26,11 @@ pub struct Config {
     pub get_detail_info_api_url: String,
     /// 對應原本的 `GET_BUCKET_INFO_API_URL`。
     pub get_bucket_info_api_url: String,
-    /// `--sync` 模式要推送資料的目標網址（CF Pages Functions 的 sync endpoint）。
-    pub sync_url: String,
+    /// `--sync` 模式打的 CF Pages Functions base URL(例如
+    /// `https://xxx.pages.dev`,不含路徑、結尾不帶 `/`)。
+    /// `/api/rs/sync`、`/api/rs/initdb` 這兩個路徑固定由程式組成,
+    /// 見 `sync_url()` / `initdb_url()`。
+    pub cf_base_url: String,
     /// 本機資料目錄（sqlite 資料庫、webview 的 cookie/cache 都放在這底下）。
     pub data_dir: PathBuf,
     /// Cloudflare Access Service Token 的 Client ID，`--sync` 打 `/api/rs/sync`
@@ -39,6 +42,16 @@ pub struct Config {
 }
 
 impl Config {
+    /// `--sync` 模式打的 sync endpoint 完整網址:`{cf_base_url}/api/rs/sync`。
+    pub fn sync_url(&self) -> String {
+        format!("{}/api/rs/sync", self.cf_base_url.trim_end_matches('/'))
+    }
+
+    /// `--sync` 模式打的 initdb endpoint 完整網址:`{cf_base_url}/api/rs/initdb`。
+    pub fn initdb_url(&self) -> String {
+        format!("{}/api/rs/initdb", self.cf_base_url.trim_end_matches('/'))
+    }
+
     /// 從環境變數讀取所有設定值；缺少任何一個都會印出完整清單並
     /// `exit(1)`。
     pub fn from_env() -> Self {
@@ -50,7 +63,7 @@ impl Config {
         let get_file_list_api_url = require_env("CIMG_GET_FILE_LIST_API_URL", &mut missing);
         let get_detail_info_api_url = require_env("CIMG_GET_DETAIL_INFO_API_URL", &mut missing);
         let get_bucket_info_api_url = require_env("CIMG_GET_BUCKET_INFO_API_URL", &mut missing);
-        let sync_url = require_env("SYNC_URL", &mut missing);
+        let cf_base_url = require_env("CF_BASE_URL", &mut missing);
         let data_dir = require_env("DATA_DIR", &mut missing);
         let cf_access_client_id = require_env("CF_ACCESS_CLIENT_ID", &mut missing);
         let cf_access_client_secret = require_env("CF_ACCESS_CLIENT_SECRET", &mut missing);
@@ -70,7 +83,7 @@ impl Config {
             get_file_list_api_url: get_file_list_api_url.unwrap(),
             get_detail_info_api_url: get_detail_info_api_url.unwrap(),
             get_bucket_info_api_url: get_bucket_info_api_url.unwrap(),
-            sync_url: sync_url.unwrap(),
+            cf_base_url: cf_base_url.unwrap(),
             data_dir: PathBuf::from(data_dir.unwrap()),
             cf_access_client_id: cf_access_client_id.unwrap(),
             cf_access_client_secret: cf_access_client_secret.unwrap(),

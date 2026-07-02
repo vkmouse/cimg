@@ -122,8 +122,8 @@ export async function getByUserId(
 }
 
 /**
- * 處理 entityType=BKT 的寫入：entityId 即為 buckets.user_id（PK 為自然鍵 user_id）
- * user_id 從 payload.user_id 取得（與 entityId 一致，不特殊處理）
+ * 處理 entityType=BKT 的寫入：entityId 即為 buckets.user_id（PK 為自然鍵 user_id）。
+ * user_id 從 payload.user_id 取得（與 entityId 一致，不特殊處理）。
  */
 export async function put(
   db: D1Database,
