@@ -153,7 +153,9 @@ export async function fetchImage(
       return { ok: false, reason: 'fetch_failed' }
     }
     const bytes = await s3Response.arrayBuffer()
-    const contentType = s3Response.headers.get('Content-Type') ?? 'image/jpeg'
+    // 不信任 S3 回的 Content-Type（常因上傳時 PutObject 沒設對 metadata 而錯，
+    // 例如變成 binary/octet-stream）。本端點固定只服務 `_640.jpg` 縮圖，直接寫死。
+    const contentType = 'image/jpeg'
     return { ok: true, bytes, contentType }
   } catch {
     return { ok: false, reason: 'fetch_failed' }
