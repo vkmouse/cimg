@@ -20,7 +20,7 @@ export interface BucketDto {
   middleKeybase: string
   originalBucket: string
   originalKeybase: string
-  version: number
+  version: number 
   isDeleted: boolean
 }
 
