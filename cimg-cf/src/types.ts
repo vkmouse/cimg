@@ -8,6 +8,8 @@ export interface PhotoItem {
   sourceDevice: string
   datePath: string
   shootingDate: number
+  /** `/api/img` 的相對網址，可直接當 <img src> 使用。使用者尚未設定 bucket 時可能為 null。 */
+  imageUrl: string | null
 }
 
 /** keyset 分頁游標：對應上一頁最後一筆的 shootingDate + imageId。 */
@@ -21,31 +23,6 @@ export interface PhotoListResponse {
   items: PhotoItem[]
   nextCursor: PhotoCursor | null
   hasMore: boolean
-}
-
-export interface BucketConfig {
-  bucket: string | null
-  keybase: string | null
-}
-
-export interface AppConfig {
-  user: {
-    credentials: {
-      accessKeyId: string | null
-      expiration: number | null
-      secretAccessKey: string | null
-      sessionToken: string | null
-    }
-  }
-  bucketInfo: {
-    region: string | null
-    exif: BucketConfig
-    expandExif: BucketConfig
-    expandOriginal: BucketConfig
-    extraLarge: BucketConfig
-    middle: BucketConfig
-    original: BucketConfig
-  }
 }
 
 /* -------------------------------------------------------------------------- */
