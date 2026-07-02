@@ -104,17 +104,19 @@ pub struct PendingMutation {
     pub created_at: String,
 }
 
-/// 撈出 `sync_queue` 裡所有待推送的記錄,依 `created_at` 升序排列
-/// (越早 enqueue 的越先推送)。供 `--sync` 模式使用。
-pub fn load_pending(conn: &Connection) -> Result<Vec<PendingMutation>> {
+/// 撈出 `sync_queue` 裡最舊的最多 `limit` 筆待推送記錄,依 `created_at` 升序排列
+/// (越早 enqueue 的越先推送)。供 `--sync` 模式分批推送使用；一次呼叫最多
+/// 只會撈回 `limit` 筆,即使 queue 裡實際還有更多。
+pub fn load_pending(conn: &Connection, limit: i64) -> Result<Vec<PendingMutation>> {
     let mut stmt = conn.prepare(
         "SELECT mutation_id, entity_type, entity_id, payload, base_version,
                 snapshot_before, created_at
          FROM sync_queue
-         ORDER BY created_at ASC",
+         ORDER BY created_at ASC
+         LIMIT ?1",
     )?;
 
-    let rows = stmt.query_map([], |row| {
+    let rows = stmt.query_map(params![limit], |row| {
         Ok(PendingMutation {
             mutation_id: row.get(0)?,
             entity_type: row.get(1)?,

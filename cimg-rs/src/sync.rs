@@ -14,6 +14,18 @@ use serde::Serialize;
 use crate::db::sync_queue::PendingMutation;
 use crate::db::Database;
 
+/// 每一批最多推送的 mutation 筆數。`sync_queue` 已依 `created_at ASC`
+/// 排序（見 `load_pending`），所以每批固定拿到的是「目前最舊的
+/// `SYNC_BATCH_SIZE` 筆」，天然符合「超過上限時從舊的開始同步」。
+const SYNC_BATCH_SIZE: i64 = 50;
+
+/// 單一批次（一次 POST /api/rs/sync）的處理結果統計。
+struct BatchStats {
+    ok_count: usize,
+    skipped_count: usize,
+    error_count: usize,
+}
+
 /// 對應 CF POST /api/rs/sync 的請求 body。
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -121,12 +133,21 @@ fn call_initdb(config: &crate::config::Config) -> Result<(), Box<dyn std::error:
     Ok(())
 }
 
-/// `--sync` 的主入口：initdb → 讀取 queue → POST → LOG。
+/// `--sync` 的主入口：initdb → 迴圈 (讀取一批 queue → POST → LOG) 直到清空。
 ///
 /// `config` 除了 `cf_base_url` 之外，也提供 `cf_access_client_id` /
 /// `cf_access_client_secret`，用來通過 `/api/rs/*` 獨立的 Cloudflare Access
 /// Service Auth 驗證（跟前台 webview 登入用的 email 驗證完全無關，見
 /// cimg-cf 的 `functions/_middleware.ts`）。
+///
+/// 每次呼叫 CF `/api/rs/sync` 最多帶 `SYNC_BATCH_SIZE` (50) 筆 push_commands，
+/// 且固定是 `sync_queue` 裡最舊的那些（`load_pending` 依 `created_at ASC`
+/// 排序）。若 `sync_queue` 裡累積超過一批，會在同一次 `run()` 呼叫內連續
+/// 送出多個批次，直到 queue 清空（某一批撈到的筆數 < `SYNC_BATCH_SIZE`，
+/// 代表已經是最後一批）；若某一批送出時發生錯誤（網路失敗 / CF 回應無法
+/// 解析等，透過 `?` 往外傳播），整個 `run()` 會立刻中止，不再嘗試後續批次
+/// ——已經成功處理的批次不受影響（各批次的 push/pull/queue 清理都是各自
+/// 獨立且已經 commit 的，不需要 rollback）。
 pub fn run(
     config: &crate::config::Config,
     db_path: &std::path::Path,
@@ -138,14 +159,56 @@ pub fn run(
     let sync_url = sync_url.as_str();
 
     let db = Database::open(db_path)?;
-    let pending = db.load_pending_mutations()?;
 
-    if pending.is_empty() {
-        println!("[sync] sync_queue 是空的，沒有待推送的資料，仍會送出請求以確認是否有新的 pullEvents。");
-    } else {
-        println!("[sync] 共 {} 筆待推送，目標: {}", pending.len(), sync_url);
+    let mut batch_no = 0usize;
+    let mut total_ok = 0usize;
+    let mut total_skipped = 0usize;
+    let mut total_error = 0usize;
+
+    loop {
+        batch_no += 1;
+
+        let pending = db.load_pending_mutations(SYNC_BATCH_SIZE)?;
+        let fetched = pending.len();
+
+        if pending.is_empty() {
+            println!("[sync] sync_queue 是空的，沒有待推送的資料，仍會送出請求以確認是否有新的 pullEvents。");
+        } else {
+            println!(
+                "[sync] 第 {batch_no} 批，共 {fetched} 筆待推送（單批上限 {SYNC_BATCH_SIZE}），目標: {sync_url}"
+            );
+        }
+
+        let stats = push_one_batch(config, &db, sync_url, pending)?;
+        total_ok += stats.ok_count;
+        total_skipped += stats.skipped_count;
+        total_error += stats.error_count;
+
+        // 這一批撈到的筆數不滿一批上限，代表 sync_queue 已經清空（或本來就是空的），
+        // 沒有必要再送下一批請求。撈滿一批則代表 queue 裡可能還有更多，繼續下一批。
+        if (fetched as i64) < SYNC_BATCH_SIZE {
+            break;
+        }
     }
 
+    println!(
+        "[sync] 全部完成 — 共 {batch_no} 批 — OK: {total_ok}, SKIPPED: {total_skipped}, ERROR: {total_error}"
+    );
+
+    Ok(())
+}
+
+/// 處理單一批次：組 request → POST → 套用 pullEvents → 處理 pushResults →
+/// 清理 sync_queue。回傳這一批的 OK / SKIPPED / ERROR 統計。
+///
+/// 這個函式不負責決定「還有沒有下一批」，那是 `run()` 外層迴圈的責任；
+/// 這裡拿到什麼 `pending` 就處理什麼（可能是一批 50 筆，也可能是空的）。
+fn push_one_batch(
+    config: &crate::config::Config,
+    db: &Database,
+    sync_url: &str,
+    pending: Vec<PendingMutation>,
+) -> Result<BatchStats, Box<dyn std::error::Error>> {
     // 在 `pending` 被消耗成 `commands` 之前,先存一份 mutation_id -> 完整
     // PendingMutation (含 entity_id / snapshot_before / created_at) 的對照表。
     // 步驟 2 處理 ERROR 時要靠這份表回頭找出對應的 entity 與 rollback 用的快照。
@@ -259,7 +322,7 @@ pub fn run(
                 match mutation_map.get(&result.mutation_id) {
                     Some(entry) => {
                         if let Err(e) = handle_error(
-                            &db,
+                            db,
                             entry,
                             &resp_body.push_results,
                             &mutation_map,
@@ -306,11 +369,15 @@ pub fn run(
     }
 
     println!(
-        "[sync] 完成 — OK: {ok_count}, SKIPPED: {skipped_count}, ERROR: {error_count}, newCursor={}",
+        "[sync] 這一批完成 — OK: {ok_count}, SKIPPED: {skipped_count}, ERROR: {error_count}, newCursor={}",
         resp_body.new_cursor
     );
 
-    Ok(())
+    Ok(BatchStats {
+        ok_count,
+        skipped_count,
+        error_count,
+    })
 }
 
 /// 處理單筆 ERROR 的推播結果。依序檢查：

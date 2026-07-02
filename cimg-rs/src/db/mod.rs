@@ -89,9 +89,10 @@ impl Database {
         sync_meta::write_last_cursor(&self.conn, new_cursor)
     }
 
-    /// 撈出 `sync_queue` 裡所有待推送的記錄,依 enqueue 順序排列。
-    pub fn load_pending_mutations(&self) -> Result<Vec<sync_queue::PendingMutation>> {
-        sync_queue::load_pending(&self.conn)
+    /// 撈出 `sync_queue` 裡最舊的最多 `limit` 筆待推送記錄,依 enqueue 順序排列。
+    /// 供 `--sync` 分批推送使用,一次最多回傳 `limit` 筆。
+    pub fn load_pending_mutations(&self, limit: i64) -> Result<Vec<sync_queue::PendingMutation>> {
+        sync_queue::load_pending(&self.conn, limit)
     }
 
     /// 從 `sync_queue` 移除已經處理完成的記錄 (推播結果為 `OK` 或
