@@ -1,4 +1,4 @@
-import type { AppConfig, PhotoItem } from "../types";
+import type { AppConfig, PhotoCursor, PhotoListResponse } from "../types";
 
 /**
  * 取得目前使用者的 ID（回傳第一筆 users 的 id）
@@ -23,10 +23,17 @@ export async function fetchAppConfig(): Promise<AppConfig> {
 }
 
 /**
- * 取得照片清單（僅含 metadata，不含實際圖片網址）
+ * 取得一頁照片清單（僅含 metadata，不含實際圖片網址）。
+ * 依 shootingDate 新到舊排序，用 keyset cursor 分頁，不帶 cursor 代表撈第一頁。
  */
-export async function fetchPhotoItems(): Promise<PhotoItem[]> {
-  const res = await fetch(`/api/photos`);
+export async function fetchPhotoItems(cursor?: PhotoCursor): Promise<PhotoListResponse> {
+  const params = new URLSearchParams();
+  if (cursor) {
+    params.set("cursorDate", String(cursor.shootingDate));
+    params.set("cursorId", cursor.imageId);
+  }
+  const query = params.toString();
+  const res = await fetch(`/api/photos${query ? `?${query}` : ""}`);
   if (!res.ok) {
     throw new Error(`無法取得照片清單（${res.status}）`);
   }

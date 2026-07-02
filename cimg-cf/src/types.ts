@@ -7,6 +7,20 @@ export interface PhotoItem {
   imageId: string
   sourceDevice: string
   datePath: string
+  shootingDate: number
+}
+
+/** keyset 分頁游標：對應上一頁最後一筆的 shootingDate + imageId。 */
+export interface PhotoCursor {
+  shootingDate: number
+  imageId: string
+}
+
+/** GET /api/photos 的回應形狀。 */
+export interface PhotoListResponse {
+  items: PhotoItem[]
+  nextCursor: PhotoCursor | null
+  hasMore: boolean
 }
 
 export interface BucketConfig {

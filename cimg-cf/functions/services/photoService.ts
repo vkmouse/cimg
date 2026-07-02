@@ -1,6 +1,6 @@
 import type { PutEntityParams } from '../types'
 import * as photoRepository from '../repositories/photoRepository'
-import type { PhotoRow } from '../repositories/photoRepository'
+import type { PhotoCursor, PhotoRow } from '../repositories/photoRepository'
 import type { SyncableColumn } from '../repositories/syncableTable'
 import * as syncEventService from './syncEventService'
 import {
@@ -152,13 +152,35 @@ function parsePhotoPayload(payloadJson: string): PhotoSnakePayload {
   } as PhotoSnakePayload
 }
 
+export const DEFAULT_PAGE_SIZE = 50
+
+export interface PhotoListResult {
+  items: PhotoDto[]
+  nextCursor: PhotoCursor | null
+  hasMore: boolean
+}
+
+/**
+ * 依 shooting_date DESC, image_id DESC 排序，用 keyset (cursor) 分頁撈取一頁照片。
+ * 內部多撈 1 筆來判斷是否還有下一頁；回傳時會把多撈的那筆砍掉。
+ */
 export async function getListByUserId(
   db: D1Database,
   userId: string,
-  limit = 10,
-): Promise<PhotoDto[]> {
-  const rows = await photoRepository.getListByUserId(db, userId, limit)
-  return rows.map(toDto)
+  cursor: PhotoCursor | null,
+  limit: number = DEFAULT_PAGE_SIZE,
+): Promise<PhotoListResult> {
+  const rows = await photoRepository.getListByUserId(db, userId, cursor, limit + 1)
+
+  const hasMore = rows.length > limit
+  const pageRows = hasMore ? rows.slice(0, limit) : rows
+  const items = pageRows.map(toDto)
+
+  const lastItem = items[items.length - 1]
+  const nextCursor: PhotoCursor | null =
+    hasMore && lastItem ? { shootingDate: lastItem.shootingDate, imageId: lastItem.imageId } : null
+
+  return { items, nextCursor, hasMore }
 }
 
 /**

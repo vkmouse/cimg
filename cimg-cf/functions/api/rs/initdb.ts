@@ -76,6 +76,10 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         )
       `),
       DB.prepare(`
+        CREATE INDEX IF NOT EXISTS idx_photos_user_shooting
+        ON photos (user_id, is_deleted, shooting_date DESC, image_id DESC)
+      `),
+      DB.prepare(`
         CREATE TABLE IF NOT EXISTS sync_events (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id     TEXT NOT NULL,

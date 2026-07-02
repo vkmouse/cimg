@@ -30,14 +30,44 @@ export interface PhotoRow {
   is_deleted: number
 }
 
+/** keyset 分頁游標：上一頁最後一筆的 shooting_date + image_id。 */
+export interface PhotoCursor {
+  shootingDate: number
+  imageId: string
+}
+
+/**
+ * 依 shooting_date DESC, image_id DESC 排序，用 keyset (cursor) 分頁撈取。
+ * 不帶 cursor 代表撈第一頁。呼叫端負責多撈 1 筆來判斷 hasMore（本函式單純依 limit 撈取）。
+ */
 export async function getListByUserId(
   db: D1Database,
   userId: string,
-  limit = 10,
+  cursor: PhotoCursor | null,
+  limit: number,
 ): Promise<PhotoRow[]> {
+  const sql = cursor
+    ? `
+      SELECT * FROM photos
+      WHERE user_id = ? AND is_deleted = 0
+        AND (shooting_date < ? OR (shooting_date = ? AND image_id < ?))
+      ORDER BY shooting_date DESC, image_id DESC
+      LIMIT ?
+    `
+    : `
+      SELECT * FROM photos
+      WHERE user_id = ? AND is_deleted = 0
+      ORDER BY shooting_date DESC, image_id DESC
+      LIMIT ?
+    `
+
+  const bindings = cursor
+    ? [userId, cursor.shootingDate, cursor.shootingDate, cursor.imageId, limit]
+    : [userId, limit]
+
   const rows = await db
-    .prepare(`SELECT * FROM photos WHERE user_id = ? AND is_deleted = 0 LIMIT ?`)
-    .bind(userId, limit)
+    .prepare(sql)
+    .bind(...bindings)
     .all<PhotoRow>()
   return rows.results
 }
