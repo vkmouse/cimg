@@ -1,8 +1,10 @@
 //! `photos` 表的存取邏輯。
 //!
-//! `getFileList` 回應裡每一筆 imageId 都對應 photos 的一筆記錄:
-//! 先確保這張表裡有這筆資料 (其他欄位先留空),之後 `getDetailInfo`
-//! 回來再用 image_id 去補上剩下的欄位。
+//! `getFileList` 回應裡每一筆 imageId 都對應 photos 的一筆記錄:先確保
+//! 這張表裡有這筆資料,連同 shooting_date / uploaded_date (來自
+//! shootingTime / uploadingTime) 一併寫入,其他欄位先留空;之後
+//! `getDetailInfo` 回來再用 image_id 去補上剩下的欄位 (不含
+//! shooting_date / uploaded_date)。
 //!
 //! PK 直接採用自然鍵 `image_id`,不另外生成 UUID。
 
@@ -12,10 +14,12 @@ use serde_json::json;
 use super::sync_queue::{self, EntityType};
 
 /// `getDetailInfo` 解析出來的欄位,全部為 Option 以應對部分欄位缺失的情況。
+///
+/// 注意:shooting_date / uploaded_date 已改由 `getFileList` 的
+/// shootingTime / uploadingTime 提供(見 `ensure_exists`),
+/// `getDetailInfo` 不再負責這兩個欄位。
 #[derive(Debug, Default)]
 pub struct PhotoDetail {
-    pub shooting_date: Option<String>,
-    pub uploaded_date: Option<String>,
     pub shooting_camera: Option<String>,
     pub image_size: Option<String>,
     pub file_size: Option<String>,
@@ -39,8 +43,8 @@ struct PhotoRow {
     user_id: String,
     source_device: String,
     date_path: String,
-    shooting_date: Option<String>,
-    uploaded_date: Option<String>,
+    shooting_date: i64,
+    uploaded_date: i64,
     shooting_camera: Option<String>,
     image_size: Option<String>,
     file_size: Option<String>,
@@ -123,8 +127,12 @@ fn to_json(row: &PhotoRow) -> serde_json::Value {
 }
 
 /// 若 image_id 尚未存在,就新增一筆帶有 image_id、user_id、source_device、
-/// date_path 的資料,並寫入 sync_queue;已存在就什麼都不做 (INSERT OR
-/// IGNORE),也不寫入 sync_queue。
+/// date_path、shooting_date、uploaded_date 的資料,並寫入 sync_queue;
+/// 已存在就什麼都不做 (INSERT OR IGNORE),也不寫入 sync_queue。
+///
+/// `shooting_date` / `uploaded_date` 來自 `getFileList` 回應的
+/// shootingTime / uploadingTime(unix timestamp),只在「新增」當下寫入
+/// 一次;之後不會再被更新(`getDetailInfo` 不處理這兩個欄位)。
 ///
 /// `user_id` 由呼叫端 (`handlers::file_list`) 從 cookie 解析取得後傳入。
 /// 為 `None` 屬於不應該發生的情況 (理論上呼叫端一定能透過 cookie 取得
@@ -138,6 +146,8 @@ pub fn ensure_exists(
     user_id: Option<&str>,
     source_device: &str,
     date_path: &str,
+    shooting_date: i64,
+    uploaded_date: i64,
 ) -> Result<bool> {
     let user_id = match user_id {
         Some(u) => u,
@@ -150,14 +160,14 @@ pub fn ensure_exists(
     };
 
     let query = format!(
-        "INSERT OR IGNORE INTO photos (image_id, user_id, source_device, date_path)
-         VALUES (?1, ?2, ?3, ?4)
+        "INSERT OR IGNORE INTO photos (image_id, user_id, source_device, date_path, shooting_date, uploaded_date)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
          RETURNING {SELECT_COLUMNS}"
     );
     let row = conn
         .query_row(
             &query,
-            params![image_id, user_id, source_device, date_path],
+            params![image_id, user_id, source_device, date_path, shooting_date, uploaded_date],
             row_from,
         )
         .optional()?;
@@ -187,8 +197,11 @@ pub fn ensure_exists(
 ///
 /// 不寫入 sync_queue、回傳 `false` 的情況:
 /// - image_id 在 DB 裡找不到。
-/// - image_id 存在,但 17 個欄位都沒有變化 (WHERE 條件不成立,UPDATE 不會
+/// - image_id 存在,但 15 個欄位都沒有變化 (WHERE 條件不成立,UPDATE 不會
 ///   真的執行,RETURNING 也不會有任何列)。
+///
+/// 注意:shooting_date / uploaded_date 不在此函式的更新範圍內,這兩個
+/// 欄位只在 `ensure_exists` 新增時寫入一次。
 ///
 /// 回傳 `true` 代表確實更新到一筆 (且資料有變動);其餘情況都回傳 `false`,
 /// 兩種情況在回傳值上不做區分。
@@ -209,43 +222,39 @@ pub fn update_detail(conn: &Connection, image_id: &str, detail: &PhotoDetail) ->
     // 沒有變化就不會真的 UPDATE,RETURNING 也不會有任何列。
     let update_query = format!(
         "UPDATE photos SET
-            shooting_date         = ?1,
-            uploaded_date         = ?2,
-            shooting_camera       = ?3,
-            image_size            = ?4,
-            file_size             = ?5,
-            file_format           = ?6,
-            shutter_speed         = ?7,
-            aperture_value        = ?8,
-            iso_speed             = ?9,
-            lens_focal_length     = ?10,
-            white_balance_mode    = ?11,
-            exposure_compensation = ?12,
-            flash_firing          = ?13,
-            lens                  = ?14,
-            subject_category      = ?15,
-            blur_judgement        = ?16,
-            exposure_judgement    = ?17,
+            shooting_camera       = ?1,
+            image_size            = ?2,
+            file_size             = ?3,
+            file_format           = ?4,
+            shutter_speed         = ?5,
+            aperture_value        = ?6,
+            iso_speed             = ?7,
+            lens_focal_length     = ?8,
+            white_balance_mode    = ?9,
+            exposure_compensation = ?10,
+            flash_firing          = ?11,
+            lens                  = ?12,
+            subject_category      = ?13,
+            blur_judgement        = ?14,
+            exposure_judgement    = ?15,
             version               = photos.version + 1
-        WHERE image_id = ?18
+        WHERE image_id = ?16
         AND (
-            photos.shooting_date         IS NOT ?1  OR
-            photos.uploaded_date         IS NOT ?2  OR
-            photos.shooting_camera       IS NOT ?3  OR
-            photos.image_size            IS NOT ?4  OR
-            photos.file_size             IS NOT ?5  OR
-            photos.file_format           IS NOT ?6  OR
-            photos.shutter_speed         IS NOT ?7  OR
-            photos.aperture_value        IS NOT ?8  OR
-            photos.iso_speed             IS NOT ?9  OR
-            photos.lens_focal_length     IS NOT ?10 OR
-            photos.white_balance_mode    IS NOT ?11 OR
-            photos.exposure_compensation IS NOT ?12 OR
-            photos.flash_firing          IS NOT ?13 OR
-            photos.lens                  IS NOT ?14 OR
-            photos.subject_category      IS NOT ?15 OR
-            photos.blur_judgement        IS NOT ?16 OR
-            photos.exposure_judgement    IS NOT ?17
+            photos.shooting_camera       IS NOT ?1  OR
+            photos.image_size            IS NOT ?2  OR
+            photos.file_size             IS NOT ?3  OR
+            photos.file_format           IS NOT ?4  OR
+            photos.shutter_speed         IS NOT ?5  OR
+            photos.aperture_value        IS NOT ?6  OR
+            photos.iso_speed             IS NOT ?7  OR
+            photos.lens_focal_length     IS NOT ?8  OR
+            photos.white_balance_mode    IS NOT ?9  OR
+            photos.exposure_compensation IS NOT ?10 OR
+            photos.flash_firing          IS NOT ?11 OR
+            photos.lens                  IS NOT ?12 OR
+            photos.subject_category      IS NOT ?13 OR
+            photos.blur_judgement        IS NOT ?14 OR
+            photos.exposure_judgement    IS NOT ?15
         )
         RETURNING {SELECT_COLUMNS}"
     );
@@ -253,8 +262,6 @@ pub fn update_detail(conn: &Connection, image_id: &str, detail: &PhotoDetail) ->
         .query_row(
             &update_query,
             params![
-                detail.shooting_date,
-                detail.uploaded_date,
                 detail.shooting_camera,
                 detail.image_size,
                 detail.file_size,
@@ -277,7 +284,7 @@ pub fn update_detail(conn: &Connection, image_id: &str, detail: &PhotoDetail) ->
         .optional()?;
 
     // 沒有任何列被回傳:可能是 image_id 在 SELECT 與 UPDATE 之間消失
-    // (理論上不會發生,單機單連線),也可能是 17 個欄位都沒變動。
+    // (理論上不會發生,單機單連線),也可能是 15 個欄位都沒變動。
     // 兩種情況都不寫 sync_queue,回傳 false。
     let new_row = match new_row {
         Some(r) => r,
@@ -309,8 +316,10 @@ struct RemotePayload {
     source_device: String,
     #[serde(default)]
     date_path: String,
-    shooting_date: Option<String>,
-    uploaded_date: Option<String>,
+    #[serde(default)]
+    shooting_date: i64,
+    #[serde(default)]
+    uploaded_date: i64,
     shooting_camera: Option<String>,
     image_size: Option<String>,
     file_size: Option<String>,

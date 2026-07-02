@@ -20,6 +20,10 @@ struct FileListItem {
     source_device: String,
     #[serde(rename = "datePath")]
     date_path: String,
+    #[serde(rename = "shootingTime")]
+    shooting_time: i64,
+    #[serde(rename = "uploadingTime")]
+    uploading_time: i64,
 }
 
 #[derive(Deserialize)]
@@ -45,7 +49,14 @@ impl ApiHandler for FileListHandler {
                 .map_err(|e| AppError::ParseError(e.to_string()))?;
 
         for item in &parsed.items {
-            ctx.db.ensure_photo_exists(&item.image_id, Some(&user_id), &item.source_device, &item.date_path)?;
+            ctx.db.ensure_photo_exists(
+                &item.image_id,
+                Some(&user_id),
+                &item.source_device,
+                &item.date_path,
+                item.shooting_time,
+                item.uploading_time,
+            )?;
         }
         Ok(())
     }

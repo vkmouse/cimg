@@ -9,8 +9,8 @@ export interface PhotoRow {
   user_id: string
   source_device: string
   date_path: string
-  shooting_date: string | null
-  uploaded_date: string | null
+  shooting_date: number
+  uploaded_date: number
   shooting_camera: string | null
   image_size: string | null
   file_size: string | null

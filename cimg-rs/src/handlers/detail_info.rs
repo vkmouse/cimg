@@ -44,8 +44,6 @@ fn parse_detail(response_data: &str) -> Result<PhotoDetail, serde_json::Error> {
     for item in res.info {
         let val = item.value.into_iter().next();
         match item.name.as_str() {
-            "拍攝日期" => detail.shooting_date = val,
-            "上載日期" => detail.uploaded_date = val,
             "拍攝影像的相機" => detail.shooting_camera = val,
             "影像大小" => detail.image_size = val,
             "檔案大小" => detail.file_size = val,

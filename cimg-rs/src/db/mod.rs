@@ -49,7 +49,8 @@ impl Database {
     }
 
     /// 確保 photos 裡有 image_id 的資料;若沒有,
-    /// 就新增一筆帶有 id (內部生成)、image_id、user_id、source_device、date_path 的資料。
+    /// 就新增一筆帶有 id (內部生成)、image_id、user_id、source_device、date_path、
+    /// shooting_date、uploaded_date 的資料。
     /// 回傳值代表這次是否真的新增了一筆。
     pub fn ensure_photo_exists(
         &self,
@@ -57,8 +58,18 @@ impl Database {
         user_id: Option<&str>,
         source_device: &str,
         date_path: &str,
+        shooting_date: i64,
+        uploaded_date: i64,
     ) -> Result<bool> {
-        photos::ensure_exists(&self.conn, image_id, user_id, source_device, date_path)
+        photos::ensure_exists(
+            &self.conn,
+            image_id,
+            user_id,
+            source_device,
+            date_path,
+            shooting_date,
+            uploaded_date,
+        )
     }
 
     /// 用 `getDetailInfo` 解析結果更新對應 image_id 的欄位。

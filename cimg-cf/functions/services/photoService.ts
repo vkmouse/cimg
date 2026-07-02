@@ -4,6 +4,7 @@ import type { PhotoRow } from '../repositories/photoRepository'
 import type { SyncableColumn } from '../repositories/syncableTable'
 import * as syncEventService from './syncEventService'
 import {
+  isFiniteNumber,
   isNonEmptyString,
   isStringOrNull,
   parsePayloadJson,
@@ -15,8 +16,8 @@ export interface PhotoDto {
   userId: string
   sourceDevice: string
   datePath: string
-  shootingDate: string | null
-  uploadedDate: string | null
+  shootingDate: number
+  uploadedDate: number
   shootingCamera: string | null
   imageSize: string | null
   fileSize: string | null
@@ -69,8 +70,8 @@ interface PhotoSnakePayload {
   user_id: string
   source_device: string
   date_path: string
-  shooting_date: string | null
-  uploaded_date: string | null
+  shooting_date: number
+  uploaded_date: number
   shooting_camera: string | null
   image_size: string | null
   file_size: string | null
@@ -91,8 +92,6 @@ interface PhotoSnakePayload {
 
 /** photos 表裡允許 NULL 的欄位（snake_case）。 */
 const NULLABLE_SNAKE_FIELDS: (keyof PhotoSnakePayload)[] = [
-  'shooting_date',
-  'uploaded_date',
   'shooting_camera',
   'image_size',
   'file_size',
@@ -122,6 +121,12 @@ function parsePhotoPayload(payloadJson: string): PhotoSnakePayload {
   if (!isNonEmptyString(raw.date_path)) {
     throw new PayloadValidationError('payload.date_path 必須是非空字串')
   }
+  if (!isFiniteNumber(raw.shooting_date)) {
+    throw new PayloadValidationError('payload.shooting_date 必須是數字')
+  }
+  if (!isFiniteNumber(raw.uploaded_date)) {
+    throw new PayloadValidationError('payload.uploaded_date 必須是數字')
+  }
   const isDeleted = raw.is_deleted === 1 || raw.is_deleted === true
   if (typeof raw.is_deleted !== 'number' && typeof raw.is_deleted !== 'boolean') {
     throw new PayloadValidationError('payload.is_deleted 必須是數字或 boolean')
@@ -140,6 +145,8 @@ function parsePhotoPayload(payloadJson: string): PhotoSnakePayload {
     user_id: raw.user_id as string,
     source_device: raw.source_device as string,
     date_path: raw.date_path as string,
+    shooting_date: raw.shooting_date as number,
+    uploaded_date: raw.uploaded_date as number,
     is_deleted: isDeleted,
     ...nullableFields,
   } as PhotoSnakePayload
