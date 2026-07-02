@@ -37,6 +37,10 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
   const jwtHeader = request.headers.get('Cf-Access-Jwt-Assertion')
   if (!jwtHeader) {
+    // 代表這個請求沒有被 Cloudflare Access 攔到（Access 沒有附上這個 header），
+    // 通常表示 Access Application 的路徑設定沒有精確比對到這個 URL
+    // （例如少了結尾的 `*`），跟我們自己的 JWT 驗證邏輯無關。
+    console.error('[rs-auth] 沒有 Cf-Access-Jwt-Assertion header，代表這個請求沒有被 Cloudflare Access 攔到，請檢查 Access Application 的路徑設定')
     return new Response('Unauthorized', { status: 401 })
   }
 
