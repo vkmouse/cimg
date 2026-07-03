@@ -1,6 +1,7 @@
 import type { AuthContext, Env } from '../../types'
 import * as photoService from '../../services/photoService'
 import * as bucketService from '../../services/bucketService'
+import { EXTRA_LARGE_SUFFIX } from '../../services/imageService'
 import type { PhotoDto } from '../../services/photoService'
 import type { BucketDto } from '../../services/bucketService'
 
@@ -17,6 +18,7 @@ function buildImageUrl(photo: PhotoDto, bucket: BucketDto): string {
     bucket: bucket.extraLargeBucket,
     keybase: bucket.extraLargeKeybase,
     region: bucket.region,
+    suffix: EXTRA_LARGE_SUFFIX,
   })
   return `/api/img?${params.toString()}`
 }

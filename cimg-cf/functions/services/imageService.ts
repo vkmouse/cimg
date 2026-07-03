@@ -2,7 +2,10 @@ import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import * as credentialService from './credentialService'
 
-const THUMBNAIL_SUFFIX = '_640.jpg'
+/** 目前 `/api/img` 支援的兩種縮圖後綴，其他值一律視為非法參數（400）。 */
+export const MIDDLE_SUFFIX = '_640.jpg'
+export const EXTRA_LARGE_SUFFIX = '.jpg'
+const ALLOWED_SUFFIXES = new Set<string>([MIDDLE_SUFFIX, EXTRA_LARGE_SUFFIX])
 /** presigned URL 僅供後端立即使用，不回傳給前端，TTL 可以給很短。 */
 const PRESIGN_EXPIRES_IN_SECONDS = 60
 
@@ -13,6 +16,7 @@ export interface ImageParams {
   bucket: string
   keybase: string
   region: string
+  suffix: string
 }
 
 export type ImageErrorReason = 'invalid_params' | 'no_credential' | 'fetch_failed'
@@ -38,6 +42,8 @@ export type ImageResult = ImageSuccess | ImageError
  *   但不允許空片段、不允許 `.`／`..`，避免組出跳出預期路徑的 S3 key
  * - bucket：比照 AWS S3 bucket 命名規則（小寫英數字、`.`、`-`，3~63 字元）
  * - region：比照 AWS region 格式（如 `us-east-1`、`ap-northeast-1`）
+ * - suffix：直接接在 object key 後面，不走 isValidSegment/isValidPath 那套規則，
+ *   而是白名單（見 ALLOWED_SUFFIXES），避免呼叫端塞入任意字串組出非預期的 S3 key
  *
  * 這裡刻意先做 decodeURIComponent 後再驗證，避免 `%2e%2e%2f` 這類編碼過的
  * `../` 繞過檢查（URL.searchParams 拿到的值已經是 decode 過的，但仍在此顯式
@@ -66,22 +72,23 @@ export function validateParams(raw: {
   bucket: string | null
   keybase: string | null
   region: string | null
+  suffix: string | null
 }): ImageParams | null {
-  const { imageId, sourceDevice, datePath, bucket, keybase, region } = raw
+  const { imageId, sourceDevice, datePath, bucket, keybase, region, suffix } = raw
 
-  if (!imageId || !sourceDevice || !datePath || !bucket || !keybase || !region) {
+  if (!imageId || !sourceDevice || !datePath || !bucket || !keybase || !region || !suffix) {
     return null
   }
 
-  let decoded: [string, string, string, string, string, string]
+  let decoded: [string, string, string, string, string, string, string]
   try {
-    decoded = [imageId, sourceDevice, datePath, bucket, keybase, region].map((v) =>
+    decoded = [imageId, sourceDevice, datePath, bucket, keybase, region, suffix].map((v) =>
       decodeURIComponent(v),
     ) as typeof decoded
   } catch {
     return null
   }
-  const [dImageId, dSourceDevice, dDatePath, dBucket, dKeybase, dRegion] = decoded
+  const [dImageId, dSourceDevice, dDatePath, dBucket, dKeybase, dRegion, dSuffix] = decoded
 
   if (!isValidSegment(dImageId)) return null
   if (!isValidSegment(dSourceDevice)) return null
@@ -89,6 +96,7 @@ export function validateParams(raw: {
   if (!isValidPath(dKeybase)) return null
   if (!BUCKET_RE.test(dBucket)) return null
   if (!REGION_RE.test(dRegion)) return null
+  if (!ALLOWED_SUFFIXES.has(dSuffix)) return null
 
   return {
     imageId: dImageId,
@@ -97,11 +105,12 @@ export function validateParams(raw: {
     bucket: dBucket,
     keybase: dKeybase,
     region: dRegion,
+    suffix: dSuffix,
   }
 }
 
 function buildObjectKey(params: ImageParams): string {
-  return `${params.keybase}/${params.sourceDevice}/${params.datePath}/${params.imageId}${THUMBNAIL_SUFFIX}`
+  return `${params.keybase}/${params.sourceDevice}/${params.datePath}/${params.imageId}${params.suffix}`
 }
 
 /**
@@ -154,7 +163,7 @@ export async function fetchImage(
     }
     const bytes = await s3Response.arrayBuffer()
     // 不信任 S3 回的 Content-Type（常因上傳時 PutObject 沒設對 metadata 而錯，
-    // 例如變成 binary/octet-stream）。本端點固定只服務 `_640.jpg` 縮圖，直接寫死。
+    // 例如變成 binary/octet-stream）。本端點目前支援的兩種 suffix 都是 jpg，直接寫死。
     const contentType = 'image/jpeg'
     return { ok: true, bytes, contentType }
   } catch {

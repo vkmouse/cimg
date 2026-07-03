@@ -1,6 +1,7 @@
 import type { AuthContext, Env } from '../types'
 import * as photoService from '../services/photoService'
 import * as bucketService from '../services/bucketService'
+import { MIDDLE_SUFFIX } from '../services/imageService'
 import type { PhotoDto } from '../services/photoService'
 import type { BucketDto } from '../services/bucketService'
 import type { PhotoCursor } from '../repositories/photoRepository'
@@ -38,6 +39,7 @@ function buildImageUrl(photo: PhotoDto, bucket: BucketDto): string {
     bucket: bucket.middleBucket,
     keybase: bucket.middleKeybase,
     region: bucket.region,
+    suffix: MIDDLE_SUFFIX,
   })
   return `/api/img?${params.toString()}`
 }

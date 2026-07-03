@@ -13,6 +13,7 @@ export const onRequest: PagesFunction<Env, any, AuthContext> = async (context) =
     bucket: url.searchParams.get('bucket'),
     keybase: url.searchParams.get('keybase'),
     region: url.searchParams.get('region'),
+    suffix: url.searchParams.get('suffix'),
   })
 
   if (!params) {
