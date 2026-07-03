@@ -25,10 +25,17 @@ export interface PhotoListResponse {
   hasMore: boolean
 }
 
+/** detail 頁左右鄰居（上一張／下一張）的精簡資料，找不到（已在時間軸邊界）時為 null。 */
+export interface PhotoNeighbor {
+  imageId: string
+  imageUrl: string | null
+}
+
 /**
  * GET /api/photos/:id 的回應形狀。
  * `imageUrl` 是用 extraLarge bucket 組出來的（畫質比列表縮圖好），
  * 使用者尚未設定 bucket 時可能為 null。
+ * `prev` = 時間上更新的那張（往右滑看到）；`next` = 時間上更舊的那張（往左滑看到）。
  */
 export interface PhotoDetailResponse {
   imageId: string
@@ -36,6 +43,8 @@ export interface PhotoDetailResponse {
   datePath: string
   shootingDate: number
   imageUrl: string | null
+  prev: PhotoNeighbor | null
+  next: PhotoNeighbor | null
 }
 
 /* -------------------------------------------------------------------------- */

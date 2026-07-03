@@ -88,6 +88,52 @@ export async function getByImageId(
   return row ?? null
 }
 
+/**
+ * 找「更新的鄰居」（prev，方向定義見規格 1.1）：
+ * shooting_date DESC, image_id DESC 排序下，排在目前這筆「前面」的下一筆。
+ */
+export async function getNewerNeighbor(
+  db: D1Database,
+  userId: string,
+  shootingDate: number,
+  imageId: string,
+): Promise<PhotoRow | null> {
+  const row = await db
+    .prepare(
+      `SELECT * FROM photos
+       WHERE user_id = ? AND is_deleted = 0
+         AND (shooting_date > ? OR (shooting_date = ? AND image_id > ?))
+       ORDER BY shooting_date ASC, image_id ASC
+       LIMIT 1`,
+    )
+    .bind(userId, shootingDate, shootingDate, imageId)
+    .first<PhotoRow>()
+  return row ?? null
+}
+
+/**
+ * 找「更舊的鄰居」（next，方向定義見規格 1.1）：
+ * shooting_date DESC, image_id DESC 排序下，排在目前這筆「後面」的下一筆。
+ */
+export async function getOlderNeighbor(
+  db: D1Database,
+  userId: string,
+  shootingDate: number,
+  imageId: string,
+): Promise<PhotoRow | null> {
+  const row = await db
+    .prepare(
+      `SELECT * FROM photos
+       WHERE user_id = ? AND is_deleted = 0
+         AND (shooting_date < ? OR (shooting_date = ? AND image_id < ?))
+       ORDER BY shooting_date DESC, image_id DESC
+       LIMIT 1`,
+    )
+    .bind(userId, shootingDate, shootingDate, imageId)
+    .first<PhotoRow>()
+  return row ?? null
+}
+
 export async function insert(
   db: D1Database,
   imageId: string,
