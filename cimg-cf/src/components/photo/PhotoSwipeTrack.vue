@@ -3,10 +3,11 @@
     <div
       class="swipe-track"
       :style="trackStyle"
-      @pointerdown="onPointerDown"
-      @pointermove="onPointerMove"
-      @pointerup="onPointerUp"
-      @pointercancel="onPointerUp"
+      @touchstart.passive="onTouchStart"
+      @touchmove="onTouchMove"
+      @touchend="onTouchEnd"
+      @touchcancel="onTouchEnd"
+      @mousedown="onMouseDown"
     >
       <div class="swipe-slide">
         <img
@@ -68,7 +69,6 @@ const isSwitching = ref(false); // 切換動畫進行中，鎖住新的手勢輸
 let startX = 0;
 let startY = 0;
 let lockDir: "h" | "v" | null = null;
-let activePointerId: number | null = null; // 同時只追蹤一根手指 / 一個滑鼠指標
 
 const hasPrev = computed(() => !!props.prevPhoto?.imageUrl);
 const hasNext = computed(() => !!props.nextPhoto?.imageUrl);
@@ -95,6 +95,8 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   resizeObserver?.disconnect();
+  window.removeEventListener("mousemove", onMouseMove);
+  window.removeEventListener("mouseup", onMouseUp);
 });
 
 /** 邊界阻力：拖越多阻力越大，漸進逼近但不會超過 maxOffset。 */
@@ -106,34 +108,27 @@ function applyResistance(dx: number, maxOffset: number): number {
 }
 
 /**
- * 統一用 Pointer Events 處理滑鼠 / 觸控 / 手寫筆，取代原本只認 Touch Events 的寫法。
- * 原因：
- * 1) 桌面滑鼠完全不會觸發 touch 系列事件，之前的版本在桌面上一定滑不動。
- * 2) 用 setPointerCapture 把手勢「鎖」在起手的元素上，即使手指/滑鼠移出元素邊界
- *    也能持續收到 move/up，避免真機上因為快速滑動而漏接事件。
+ * 手勢核心邏輯，不管 x/y 是從 touch 還是 mouse 事件來的都共用同一套判斷。
+ *
+ * 為什麼不用單一的 Pointer Events 就好：
+ * iOS Safari 對 PointerEvent.preventDefault() 的支援並不可靠（這是 WebKit 行之有年的已知問題，
+ * 許多滑動/輪播函式庫因此仍選擇 Touch Events 而非純 Pointer Events）；Touch Events 上呼叫
+ * preventDefault() 在 iOS Safari 是最穩定、行為最一致的做法。因此這裡維持「touch 事件處理觸控、
+ * mouse 事件另外處理滑鼠」的組合，而不是圖方便統一改成 pointer 事件。
  */
-function onPointerDown(e: PointerEvent) {
-  if (isSwitching.value) return;
-  if (e.pointerType === "mouse" && e.button !== 0) return; // 只認滑鼠左鍵
-  if (activePointerId !== null) return; // 已有手勢在進行中（多指觸控時忽略其他手指）
-
-  activePointerId = e.pointerId;
-  (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-
+function startGesture(x: number, y: number) {
   measure(); // 手勢開始時重新量一次，避免用到過期的寬度
-  startX = e.clientX;
-  startY = e.clientY;
+  startX = x;
+  startY = y;
   lockDir = null;
   isTransitioning.value = false;
 }
 
-function onPointerMove(e: PointerEvent) {
-  if (isSwitching.value) return;
-  if (e.pointerId !== activePointerId) return;
+function moveGesture(x: number, y: number, preventDefault: () => void) {
   if (lockDir === "v") return;
 
-  const dx = e.clientX - startX;
-  const dy = e.clientY - startY;
+  const dx = x - startX;
+  const dy = y - startY;
   const absDx = Math.abs(dx);
   const absDy = Math.abs(dy);
 
@@ -149,7 +144,7 @@ function onPointerMove(e: PointerEvent) {
   }
 
   // lockDir === 'h'
-  e.preventDefault();
+  preventDefault();
 
   const resistanceMax = containerWidth.value * RESISTANCE_MAX_RATIO;
   if (dx > 0 && !hasPrev.value) {
@@ -161,11 +156,7 @@ function onPointerMove(e: PointerEvent) {
   }
 }
 
-function onPointerUp(e: PointerEvent) {
-  if (e.pointerId !== activePointerId) return;
-  activePointerId = null;
-
-  if (isSwitching.value) return;
+function endGesture() {
   if (lockDir !== "h") {
     dragOffsetX.value = 0;
     lockDir = null;
@@ -186,6 +177,46 @@ function onPointerUp(e: PointerEvent) {
   }
 
   lockDir = null;
+}
+
+// ── Touch（手機／平板，用 Touch Events 確保 preventDefault 在 iOS Safari 上真的有效） ──
+function onTouchStart(e: TouchEvent) {
+  if (isSwitching.value) return;
+  const t = e.touches[0]!;
+  startGesture(t.clientX, t.clientY);
+}
+
+function onTouchMove(e: TouchEvent) {
+  if (isSwitching.value) return;
+  const t = e.touches[0]!;
+  moveGesture(t.clientX, t.clientY, () => e.preventDefault());
+}
+
+function onTouchEnd() {
+  if (isSwitching.value) return;
+  endGesture();
+}
+
+// ── Mouse（桌面滑鼠拖曳）。mousedown 時才掛 window 上的 move/up，
+//    這樣滑鼠拖出元素範圍外也還能追蹤到，放開時再拆掉監聽。 ──
+function onMouseDown(e: MouseEvent) {
+  if (isSwitching.value) return;
+  if (e.button !== 0) return; // 只認滑鼠左鍵
+  startGesture(e.clientX, e.clientY);
+  window.addEventListener("mousemove", onMouseMove);
+  window.addEventListener("mouseup", onMouseUp);
+}
+
+function onMouseMove(e: MouseEvent) {
+  if (isSwitching.value) return;
+  moveGesture(e.clientX, e.clientY, () => e.preventDefault());
+}
+
+function onMouseUp() {
+  window.removeEventListener("mousemove", onMouseMove);
+  window.removeEventListener("mouseup", onMouseUp);
+  if (isSwitching.value) return;
+  endGesture();
 }
 
 function triggerSwitch(direction: "prev" | "next") {
