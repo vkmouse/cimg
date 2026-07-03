@@ -258,10 +258,14 @@ function triggerSwitch(direction: "prev" | "next") {
   width: 100%;
   height: 100%;
   will-change: transform;
-  /* 只交給瀏覽器原生處理垂直方向，水平方向交給 JS（Pointer Events）自己判斷 */
-  touch-action: pan-y;
+  /* 刻意不設定 touch-action（維持瀏覽器預設 auto），完全比照 DonutChart 的做法：
+     水平/垂直方向由 JS 的 lockDir 自行判斷，水平手勢再用 touchmove 內的
+     preventDefault() 接管。實測發現若同時設定 touch-action: pan-y，又在 JS
+     裡對水平方向呼叫 preventDefault，iOS Safari 有機率在判斷手勢方向時卡住，
+     導致 touchmove 完全不再派送給 JS —— 這就是「完全滑不動」的成因。 */
   cursor: grab;
   user-select: none;
+  -webkit-user-select: none;
 }
 
 .swipe-track:active {
