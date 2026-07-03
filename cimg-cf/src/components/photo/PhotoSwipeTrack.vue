@@ -3,10 +3,10 @@
     <div
       class="swipe-track"
       :style="trackStyle"
-      @touchstart.passive="onTouchStart"
-      @touchmove="onTouchMove"
-      @touchend="onTouchEnd"
-      @touchcancel="onTouchEnd"
+      @pointerdown="onPointerDown"
+      @pointermove="onPointerMove"
+      @pointerup="onPointerUp"
+      @pointercancel="onPointerUp"
     >
       <div class="swipe-slide">
         <img
@@ -68,6 +68,7 @@ const isSwitching = ref(false); // 切換動畫進行中，鎖住新的手勢輸
 let startX = 0;
 let startY = 0;
 let lockDir: "h" | "v" | null = null;
+let activePointerId: number | null = null; // 同時只追蹤一根手指 / 一個滑鼠指標
 
 const hasPrev = computed(() => !!props.prevPhoto?.imageUrl);
 const hasNext = computed(() => !!props.nextPhoto?.imageUrl);
@@ -104,23 +105,35 @@ function applyResistance(dx: number, maxOffset: number): number {
   return sign * damped;
 }
 
-function onTouchStart(e: TouchEvent) {
+/**
+ * 統一用 Pointer Events 處理滑鼠 / 觸控 / 手寫筆，取代原本只認 Touch Events 的寫法。
+ * 原因：
+ * 1) 桌面滑鼠完全不會觸發 touch 系列事件，之前的版本在桌面上一定滑不動。
+ * 2) 用 setPointerCapture 把手勢「鎖」在起手的元素上，即使手指/滑鼠移出元素邊界
+ *    也能持續收到 move/up，避免真機上因為快速滑動而漏接事件。
+ */
+function onPointerDown(e: PointerEvent) {
   if (isSwitching.value) return;
+  if (e.pointerType === "mouse" && e.button !== 0) return; // 只認滑鼠左鍵
+  if (activePointerId !== null) return; // 已有手勢在進行中（多指觸控時忽略其他手指）
+
+  activePointerId = e.pointerId;
+  (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+
   measure(); // 手勢開始時重新量一次，避免用到過期的寬度
-  const t = e.touches[0]!;
-  startX = t.clientX;
-  startY = t.clientY;
+  startX = e.clientX;
+  startY = e.clientY;
   lockDir = null;
   isTransitioning.value = false;
 }
 
-function onTouchMove(e: TouchEvent) {
+function onPointerMove(e: PointerEvent) {
   if (isSwitching.value) return;
+  if (e.pointerId !== activePointerId) return;
   if (lockDir === "v") return;
 
-  const t = e.touches[0]!;
-  const dx = t.clientX - startX;
-  const dy = t.clientY - startY;
+  const dx = e.clientX - startX;
+  const dy = e.clientY - startY;
   const absDx = Math.abs(dx);
   const absDy = Math.abs(dy);
 
@@ -148,7 +161,10 @@ function onTouchMove(e: TouchEvent) {
   }
 }
 
-function onTouchEnd() {
+function onPointerUp(e: PointerEvent) {
+  if (e.pointerId !== activePointerId) return;
+  activePointerId = null;
+
   if (isSwitching.value) return;
   if (lockDir !== "h") {
     dragOffsetX.value = 0;
@@ -201,6 +217,9 @@ function triggerSwitch(direction: "prev" | "next") {
   width: 100%;
   height: 100%;
   align-self: stretch;
+  /* 降低被 Safari「邊緣滑動返回上一頁」系統手勢搶走的機率
+     （水平滑動照片跟系統返回手勢方向完全一樣，容易衝突）。 */
+  overscroll-behavior-x: contain;
 }
 
 .swipe-track {
@@ -208,7 +227,14 @@ function triggerSwitch(direction: "prev" | "next") {
   width: 100%;
   height: 100%;
   will-change: transform;
+  /* 只交給瀏覽器原生處理垂直方向，水平方向交給 JS（Pointer Events）自己判斷 */
   touch-action: pan-y;
+  cursor: grab;
+  user-select: none;
+}
+
+.swipe-track:active {
+  cursor: grabbing;
 }
 
 .swipe-slide {
@@ -218,6 +244,9 @@ function triggerSwitch(direction: "prev" | "next") {
   display: flex;
   align-items: center;
   justify-content: center;
+  /* 防止 iOS Safari 在圖片上長按觸發「預覽 / 儲存影像」的原生手勢，
+     搶走本該屬於左右滑動的觸控序列。 */
+  -webkit-touch-callout: none;
 }
 
 .swipe-slide-img {
@@ -226,5 +255,8 @@ function triggerSwitch(direction: "prev" | "next") {
   object-fit: contain;
   -webkit-user-drag: none;
   user-select: none;
+  /* 讓 pointerdown 一律落在外層 .swipe-track 上，不要讓 <img> 自己接手手勢，
+     避免真機上 img 的原生拖曳/長按行為吃掉事件。 */
+  pointer-events: none;
 }
 </style>
