@@ -1,19 +1,21 @@
 <template>
   <div class="photo-grid">
     <PhotoCell
-      v-for="(url, index) in urls"
-      :key="url"
-      :src="url"
+      v-for="(photo, index) in photos"
+      :key="photo.imageId"
+      :src="photo.imageUrl"
       :alt="`照片 ${index + 1}`"
+      :image-id="photo.imageId"
     />
   </div>
 </template>
 
 <script setup lang="ts">
 import PhotoCell from "./PhotoCell.vue";
+import type { PhotoThumbnail } from "../../composables/usePhotoLibrary";
 
 defineProps<{
-  urls: string[];
+  photos: PhotoThumbnail[];
 }>();
 </script>
 

@@ -6,7 +6,7 @@
 
     <div class="library-content">
       <!-- 首次載入：整頁骨架網格 -->
-      <PhotoSkeleton v-if="loading && photoUrls.length === 0" />
+      <PhotoSkeleton v-if="loading && photos.length === 0" />
 
       <!-- 錯誤狀態 -->
       <PhotoEmptyState
@@ -17,14 +17,14 @@
 
       <!-- 空狀態 -->
       <PhotoEmptyState
-        v-else-if="photoUrls.length === 0"
+        v-else-if="photos.length === 0"
         variant="empty"
         message="這裡還沒有照片。拍下第一張照片後，它會顯示在這裡。"
       />
 
       <!-- 照片網格 -->
       <template v-else>
-        <PhotoGrid :urls="photoUrls" />
+        <PhotoGrid :photos="photos" />
 
         <!-- 無限捲動觸發點：捲到底時透過 IntersectionObserver 載入下一批；沒有下一頁時不渲染，watch 會自動 unobserve -->
         <div v-if="hasMore" ref="sentinel" class="load-more-sentinel">
@@ -42,7 +42,7 @@ import PhotoGrid from "../components/photo/PhotoGrid.vue";
 import PhotoSkeleton from "../components/photo/PhotoSkeleton.vue";
 import PhotoEmptyState from "../components/photo/PhotoEmptyState.vue";
 
-const { photoUrls, loading, loadingMore, error, hasMore, load, loadMore } = usePhotoLibrary();
+const { photos, loading, loadingMore, error, hasMore, load, loadMore } = usePhotoLibrary();
 
 const sentinel = ref<HTMLElement | null>(null);
 let observer: IntersectionObserver | null = null;

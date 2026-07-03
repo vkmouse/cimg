@@ -184,6 +184,19 @@ export async function getListByUserId(
 }
 
 /**
+ * 依 imageId 查單筆照片，並用 userId 限制擁有權。
+ * 查無資料（不存在 / 不屬於這個使用者 / 已刪除）一律回傳 null，交由呼叫端統一回 404。
+ */
+export async function getByImageId(
+  db: D1Database,
+  userId: string,
+  imageId: string,
+): Promise<PhotoDto | null> {
+  const row = await photoRepository.getByImageId(db, userId, imageId)
+  return row ? toDto(row) : null
+}
+
+/**
  * 處理 entityType=PHT 的寫入：entityId 即為 photos.image_id（PK 為自然鍵 image_id）。
  * user_id 從 payload.user_id 取得（普通業務欄位，不特殊處理）。
  */

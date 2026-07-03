@@ -72,6 +72,22 @@ export async function getListByUserId(
   return rows.results
 }
 
+/**
+ * 依 image_id 查單筆，並用 user_id 限制擁有權（避免查到別人的照片）。
+ * 查無資料（不存在 / 不屬於這個使用者 / 已刪除）一律回傳 null。
+ */
+export async function getByImageId(
+  db: D1Database,
+  userId: string,
+  imageId: string,
+): Promise<PhotoRow | null> {
+  const row = await db
+    .prepare(`SELECT * FROM photos WHERE user_id = ? AND image_id = ? AND is_deleted = 0`)
+    .bind(userId, imageId)
+    .first<PhotoRow>()
+  return row ?? null
+}
+
 export async function insert(
   db: D1Database,
   imageId: string,

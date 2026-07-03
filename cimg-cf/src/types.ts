@@ -25,6 +25,19 @@ export interface PhotoListResponse {
   hasMore: boolean
 }
 
+/**
+ * GET /api/photos/:id 的回應形狀。
+ * `imageUrl` 是用 extraLarge bucket 組出來的（畫質比列表縮圖好），
+ * 使用者尚未設定 bucket 時可能為 null。
+ */
+export interface PhotoDetailResponse {
+  imageId: string
+  sourceDevice: string
+  datePath: string
+  shootingDate: number
+  imageUrl: string | null
+}
+
 /* -------------------------------------------------------------------------- */
 /* Sync API (POST /api/rs/sync)                                               */
 /* -------------------------------------------------------------------------- */

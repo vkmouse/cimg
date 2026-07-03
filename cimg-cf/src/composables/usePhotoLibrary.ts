@@ -2,8 +2,14 @@ import { ref } from "vue";
 import { fetchMe, fetchPhotoItems } from "../services/api";
 import type { PhotoCursor } from "../types";
 
+/** 列表頁一格縮圖需要的最小資料：imageId 用來點擊導頁到 detail 頁，imageUrl 是縮圖網址。 */
+export interface PhotoThumbnail {
+  imageId: string;
+  imageUrl: string;
+}
+
 /**
- * 管理圖庫的載入狀態、分頁游標與照片網址清單。
+ * 管理圖庫的載入狀態、分頁游標與照片清單。
  * View 呼叫 `load()` 取得第一頁，捲到底時呼叫 `loadMore()` 取得下一頁。
  *
  * 後端 presign 改版後，`/api/photos` 回傳的每個 item 已經直接帶
@@ -11,7 +17,7 @@ import type { PhotoCursor } from "../types";
  * 或自己用 AWS SDK 組 presigned URL。
  */
 export function usePhotoLibrary() {
-  const photoUrls = ref<string[]>([]);
+  const photos = ref<PhotoThumbnail[]>([]);
   const loading = ref(false);
   const loadingMore = ref(false);
   const error = ref<string | null>(null);
@@ -20,14 +26,16 @@ export function usePhotoLibrary() {
   let hasLoadedOnce = false;
   let nextCursor: PhotoCursor | null = null;
 
-  function urlsOf(items: { imageUrl: string | null }[]): string[] {
-    return items.map((i) => i.imageUrl).filter((u): u is string => u !== null);
+  function thumbnailsOf(items: { imageId: string; imageUrl: string | null }[]): PhotoThumbnail[] {
+    return items
+      .filter((i): i is { imageId: string; imageUrl: string } => i.imageUrl !== null)
+      .map((i) => ({ imageId: i.imageId, imageUrl: i.imageUrl }));
   }
 
   async function load() {
     loading.value = true;
     error.value = null;
-    photoUrls.value = [];
+    photos.value = [];
     nextCursor = null;
     hasMore.value = true;
     hasLoadedOnce = false;
@@ -35,7 +43,7 @@ export function usePhotoLibrary() {
     try {
       await fetchMe();
       const page = await fetchPhotoItems();
-      photoUrls.value = urlsOf(page.items);
+      photos.value = thumbnailsOf(page.items);
       nextCursor = page.nextCursor;
       hasMore.value = page.hasMore;
       hasLoadedOnce = true;
@@ -56,7 +64,7 @@ export function usePhotoLibrary() {
 
     try {
       const page = await fetchPhotoItems(nextCursor ?? undefined);
-      photoUrls.value = [...photoUrls.value, ...urlsOf(page.items)];
+      photos.value = [...photos.value, ...thumbnailsOf(page.items)];
       nextCursor = page.nextCursor;
       hasMore.value = page.hasMore;
     } catch (err) {
@@ -67,7 +75,7 @@ export function usePhotoLibrary() {
   }
 
   return {
-    photoUrls,
+    photos,
     loading,
     loadingMore,
     error,

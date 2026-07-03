@@ -1,5 +1,9 @@
 <template>
-  <div class="photo-cell" :class="{ 'photo-cell--pressed': pressed }">
+  <RouterLink
+    :to="{ name: 'photo-detail', params: { id: imageId } }"
+    class="photo-cell"
+    :class="{ 'photo-cell--pressed': pressed }"
+  >
     <!-- 骨架屏：圖片載入完成前顯示 -->
     <div v-if="!loaded" class="photo-cell__skeleton" aria-hidden="true" />
 
@@ -14,15 +18,17 @@
       @pointerup="pressed = false"
       @pointerleave="pressed = false"
     />
-  </div>
+  </RouterLink>
 </template>
 
 <script setup lang="ts">
 import { ref } from "vue";
+import { RouterLink } from "vue-router";
 
 defineProps<{
   src: string;
   alt: string;
+  imageId: string;
 }>();
 
 const loaded = ref(false);
@@ -32,6 +38,7 @@ const pressed = ref(false);
 <style scoped>
 .photo-cell {
   position: relative;
+  display: block;
   aspect-ratio: 1 / 1;
   overflow: hidden;
   background-color: var(--bg-elevated);

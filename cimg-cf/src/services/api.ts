@@ -1,4 +1,4 @@
-import type { PhotoCursor, PhotoListResponse } from "../types";
+import type { PhotoCursor, PhotoDetailResponse, PhotoListResponse } from "../types";
 
 /**
  * 取得目前使用者的 ID（回傳第一筆 users 的 id）
@@ -25,6 +25,22 @@ export async function fetchPhotoItems(cursor?: PhotoCursor): Promise<PhotoListRe
   const res = await fetch(`/api/photos${query ? `?${query}` : ""}`);
   if (!res.ok) {
     throw new Error(`無法取得照片清單（${res.status}）`);
+  }
+  return res.json();
+}
+
+/**
+ * 取得單張照片的詳細資料（含 extraLarge 尺寸的 imageUrl）。
+ * 查無此照片（不存在 / 不屬於自己）時 API 回 404，這裡回傳 null 讓呼叫端視為「找不到這張照片」。
+ * 其他非 2xx（網路壞掉、伺服器錯誤）則拋出例外，呼叫端視為「錯誤狀態」。
+ */
+export async function fetchPhotoDetail(imageId: string): Promise<PhotoDetailResponse | null> {
+  const res = await fetch(`/api/photos/${encodeURIComponent(imageId)}`);
+  if (res.status === 404) {
+    return null;
+  }
+  if (!res.ok) {
+    throw new Error(`無法取得照片（${res.status}）`);
   }
   return res.json();
 }

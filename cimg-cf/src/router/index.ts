@@ -9,6 +9,12 @@ const router = createRouter({
       name: 'library',
       component: LibraryView,
     },
+    {
+      path: '/photo/:id',
+      name: 'photo-detail',
+      component: () => import('../views/PhotoDetailView.vue'),
+      props: true,
+    },
   ],
 })
 
