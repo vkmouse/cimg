@@ -80,11 +80,12 @@ const trackStyle = computed(() => ({
 let resizeObserver: ResizeObserver | null = null;
 
 function measure() {
-  containerWidth.value = containerRef.value?.offsetWidth ?? 0;
+  containerWidth.value = containerRef.value?.getBoundingClientRect().width ?? 0;
 }
 
 onMounted(() => {
-  measure();
+  // 用 rAF 延後到排版穩定後再量，避免拿到掛載瞬間還沒定案的暫時尺寸
+  requestAnimationFrame(measure);
   resizeObserver = new ResizeObserver(() => measure());
   if (containerRef.value) {
     resizeObserver.observe(containerRef.value);
@@ -105,6 +106,7 @@ function applyResistance(dx: number, maxOffset: number): number {
 
 function onTouchStart(e: TouchEvent) {
   if (isSwitching.value) return;
+  measure(); // 手勢開始時重新量一次，避免用到過期的寬度
   const t = e.touches[0]!;
   startX = t.clientX;
   startY = t.clientY;
