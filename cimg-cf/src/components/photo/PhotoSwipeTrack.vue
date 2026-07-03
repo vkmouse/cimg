@@ -181,6 +181,8 @@ function endGesture() {
 
 // ── Touch（手機／平板，用 Touch Events 確保 preventDefault 在 iOS Safari 上真的有效） ──
 function onTouchStart(e: TouchEvent) {
+  // eslint-disable-next-line no-console
+  console.log("[PhotoSwipeTrack] touchstart fired", e.target); // 除錯用，確認完後記得刪掉
   if (isSwitching.value) return;
   const t = e.touches[0]!;
   startGesture(t.clientX, t.clientY);
@@ -251,6 +253,9 @@ function triggerSwitch(direction: "prev" | "next") {
   /* 降低被 Safari「邊緣滑動返回上一頁」系統手勢搶走的機率
      （水平滑動照片跟系統返回手勢方向完全一樣，容易衝突）。 */
   overscroll-behavior-x: contain;
+  /* ↓↓↓ 除錯用，確認完後記得刪掉這一行 ↓↓↓ */
+  outline: 4px solid red;
+  outline-offset: -4px;
 }
 
 .swipe-track {
