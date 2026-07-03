@@ -115,7 +115,13 @@ onMounted(() => {
 
 <style scoped>
 .photo-detail-page {
-  min-height: 100dvh;
+  /* 改用 flex column + 100dvh，讓 header 和 content 自動分配高度，
+     不再靠 calc() 手動猜 header 實際渲染高度（原本的寫法會因為
+     .back-button 的負 margin 而算錯，導致 content 高度跟 header
+     真實佔用的高度對不上）。 */
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
   background-color: var(--bg-base);
   color: var(--label-primary);
 }
@@ -124,6 +130,7 @@ onMounted(() => {
   position: sticky;
   top: 0;
   z-index: 10;
+  flex-shrink: 0;
   padding: var(--header-padding-top) var(--header-padding-x) var(--header-padding-bottom);
   background-color: var(--bg-base);
 }
@@ -151,6 +158,10 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: calc(100dvh - var(--header-padding-top) - var(--header-padding-bottom) - 40px);
+  flex: 1;
+  /* flex 子項預設 min-height:auto，內容（例如超大圖片）可能撐開超出可視範圍，
+     導致底下的照片被推出視窗、觸控區域跟著跑掉。明確設 0 讓它老實依照
+     flex:1 分配到的空間顯示，而不是被內容撐大。 */
+  min-height: 0;
 }
 </style>
