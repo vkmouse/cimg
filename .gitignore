@@ -10,7 +10,6 @@
 !/cimg-rs/Cargo.lock
 !/cimg-rs/Cargo.toml
 !/cimg-rs/README.md
-!/cimg-rs/WebView2Loader.dll
 
 /cimg-cf/*
 !/cimg-cf/.vscode/
