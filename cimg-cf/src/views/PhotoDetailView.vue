@@ -27,7 +27,7 @@
         type="button"
         class="nav-button nav-button--prev"
         aria-label="上一張"
-        :disabled="!prev"
+        :disabled="!prev || isNavigating"
         @click="goPrev"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -40,7 +40,7 @@
         type="button"
         class="nav-button nav-button--next"
         aria-label="下一張"
-        :disabled="!next"
+        :disabled="!next || isNavigating"
         @click="goNext"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -69,23 +69,75 @@ const notFound = ref(false);
 const error = ref<string | null>(null);
 const prev = ref<PhotoNeighbor | null>(null);
 const next = ref<PhotoNeighbor | null>(null);
+// 背景補資料中：true 時代表新照片的 prev/next 還沒確定，先擋住按鈕避免連點
+const isNavigating = ref(false);
+
+// 用 goPrev/goNext 切換時，route 的 props.id 也會跟著變、觸發下面的 watch。
+// 但這種情況我們已經自己處理過畫面狀態了，不需要 watch 再跑一次 loadDetail（會清空畫面造成閃爍），
+// 所以用這個非 reactive 旗標讓 watch 跳過那一次。
+let skipWatch = false;
 
 function goBack() {
   router.back();
 }
 
 function goPrev() {
-  if (!prev.value) return;
-  router.replace({ name: "photo-detail", params: { id: prev.value.imageId } });
+  navigateTo(prev.value);
 }
 
 function goNext() {
-  if (!next.value) return;
-  router.replace({ name: "photo-detail", params: { id: next.value.imageId } });
+  navigateTo(next.value);
 }
 
+function navigateTo(target: PhotoNeighbor | null) {
+  if (!target || isNavigating.value) return;
+
+  isNavigating.value = true;
+
+  // 立刻用手上已有的資料顯示新照片，不清空畫面
+  if (target.imageUrl) {
+    imageUrl.value = target.imageUrl;
+    notFound.value = false;
+  } else {
+    imageUrl.value = null;
+    notFound.value = true;
+  }
+  error.value = null;
+  // 新照片自己的 prev/next 還不知道，先清空 -> 按鈕會因為 !prev / !next 自然呈現 disabled
+  prev.value = null;
+  next.value = null;
+
+  // 立刻換網址
+  skipWatch = true;
+  router.replace({ name: "photo-detail", params: { id: target.imageId } });
+
+  // 背景打 API 補齊真正的 prev/next（並校正 imageUrl/notFound，以防手上的資料跟最新狀態不一致）
+  fetchDetailInBackground(target.imageId);
+}
+
+async function fetchDetailInBackground(id: string) {
+  try {
+    const detail = await fetchPhotoDetail(id);
+    if (!detail || !detail.imageUrl) {
+      notFound.value = true;
+      imageUrl.value = null;
+      prev.value = detail?.prev ?? null;
+      next.value = detail?.next ?? null;
+      return;
+    }
+    imageUrl.value = detail.imageUrl;
+    notFound.value = false;
+    prev.value = detail.prev;
+    next.value = detail.next;
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err);
+  } finally {
+    isNavigating.value = false;
+  }
+}
+
+// 初次進入 detail 頁（例如從列表點縮圖、或直接用網址打開）走完整載入流程
 async function loadDetail(id: string) {
-  // 切換照片時重置狀態，避免殘留上一張的錯誤/空狀態或箭頭
   imageUrl.value = null;
   notFound.value = false;
   error.value = null;
@@ -108,7 +160,13 @@ async function loadDetail(id: string) {
 
 watch(
   () => props.id,
-  (id) => loadDetail(id),
+  (id) => {
+    if (skipWatch) {
+      skipWatch = false;
+      return;
+    }
+    loadDetail(id);
+  },
   { immediate: true },
 );
 </script>
