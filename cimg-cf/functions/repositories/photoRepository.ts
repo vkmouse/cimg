@@ -37,6 +37,22 @@ export interface PhotoCursor {
 }
 
 /**
+ * read 路徑（清單頁、詳情頁、詳情頁左右鄰居）共用的精簡欄位。
+ * 只包含「顯示一張照片卡片 + 排序」所需的最小欄位組合：
+ * - image_id / source_device / date_path：組出 `/api/img` 網址、辨識照片
+ * - shooting_date：排序 / keyset 分頁 / 詳情頁查鄰居用
+ *
+ * 跟 `PhotoRow`（write 路徑，`insert`/`update` 用）區分開來，
+ * 避免 read 查詢撈出用不到的 EXIF 等 17 個欄位。
+ */
+export interface PhotoListRow {
+  image_id: string
+  source_device: string
+  date_path: string
+  shooting_date: number
+}
+
+/**
  * 依 shooting_date DESC, image_id DESC 排序，用 keyset (cursor) 分頁撈取。
  * 不帶 cursor 代表撈第一頁。呼叫端負責多撈 1 筆來判斷 hasMore（本函式單純依 limit 撈取）。
  *
@@ -53,32 +69,32 @@ export async function getListByUserId(
   userId: string,
   cursor: PhotoCursor | null,
   limit: number,
-): Promise<PhotoRow[]> {
+): Promise<PhotoListRow[]> {
   if (!cursor) {
     const rows = await db
       .prepare(
-        `SELECT * FROM photos
+        `SELECT image_id, source_device, date_path, shooting_date FROM photos
          WHERE user_id = ? AND is_deleted = 0
          ORDER BY shooting_date DESC, image_id DESC
          LIMIT ?`,
       )
       .bind(userId, limit)
-      .all<PhotoRow>()
+      .all<PhotoListRow>()
     return rows.results
   }
 
   const rows = await db
     .prepare(
-      `SELECT * FROM (
-         SELECT * FROM (
-           SELECT * FROM photos
+      `SELECT image_id, source_device, date_path, shooting_date FROM (
+         SELECT image_id, source_device, date_path, shooting_date FROM (
+           SELECT image_id, source_device, date_path, shooting_date FROM photos
            WHERE user_id = ? AND is_deleted = 0 AND shooting_date < ?
            ORDER BY shooting_date DESC, image_id DESC
            LIMIT ?
          )
          UNION ALL
-         SELECT * FROM (
-           SELECT * FROM photos
+         SELECT image_id, source_device, date_path, shooting_date FROM (
+           SELECT image_id, source_device, date_path, shooting_date FROM photos
            WHERE user_id = ? AND is_deleted = 0 AND shooting_date = ? AND image_id < ?
            ORDER BY image_id DESC
            LIMIT ?
@@ -88,7 +104,7 @@ export async function getListByUserId(
        LIMIT ?`,
     )
     .bind(userId, cursor.shootingDate, limit, userId, cursor.shootingDate, cursor.imageId, limit, limit)
-    .all<PhotoRow>()
+    .all<PhotoListRow>()
   return rows.results
 }
 
@@ -100,11 +116,13 @@ export async function getByImageId(
   db: D1Database,
   userId: string,
   imageId: string,
-): Promise<PhotoRow | null> {
+): Promise<PhotoListRow | null> {
   const row = await db
-    .prepare(`SELECT * FROM photos WHERE user_id = ? AND image_id = ? AND is_deleted = 0`)
+    .prepare(
+      `SELECT image_id, source_device, date_path, shooting_date FROM photos WHERE user_id = ? AND image_id = ? AND is_deleted = 0`,
+    )
     .bind(userId, imageId)
-    .first<PhotoRow>()
+    .first<PhotoListRow>()
   return row ?? null
 }
 
@@ -124,18 +142,18 @@ export async function getNewerNeighbor(
   userId: string,
   shootingDate: number,
   imageId: string,
-): Promise<PhotoRow | null> {
+): Promise<PhotoListRow | null> {
   const row = await db
     .prepare(
-      `SELECT * FROM (
-         SELECT * FROM photos
+      `SELECT image_id, source_device, date_path, shooting_date FROM (
+         SELECT image_id, source_device, date_path, shooting_date FROM photos
          WHERE user_id = ? AND is_deleted = 0 AND shooting_date > ?
          ORDER BY shooting_date ASC, image_id ASC
          LIMIT 1
        )
        UNION ALL
-       SELECT * FROM (
-         SELECT * FROM photos
+       SELECT image_id, source_device, date_path, shooting_date FROM (
+         SELECT image_id, source_device, date_path, shooting_date FROM photos
          WHERE user_id = ? AND is_deleted = 0 AND shooting_date = ? AND image_id > ?
          ORDER BY image_id ASC
          LIMIT 1
@@ -144,7 +162,7 @@ export async function getNewerNeighbor(
        LIMIT 1`,
     )
     .bind(userId, shootingDate, userId, shootingDate, imageId)
-    .first<PhotoRow>()
+    .first<PhotoListRow>()
   return row ?? null
 }
 
@@ -158,18 +176,18 @@ export async function getOlderNeighbor(
   userId: string,
   shootingDate: number,
   imageId: string,
-): Promise<PhotoRow | null> {
+): Promise<PhotoListRow | null> {
   const row = await db
     .prepare(
-      `SELECT * FROM (
-         SELECT * FROM photos
+      `SELECT image_id, source_device, date_path, shooting_date FROM (
+         SELECT image_id, source_device, date_path, shooting_date FROM photos
          WHERE user_id = ? AND is_deleted = 0 AND shooting_date < ?
          ORDER BY shooting_date DESC, image_id DESC
          LIMIT 1
        )
        UNION ALL
-       SELECT * FROM (
-         SELECT * FROM photos
+       SELECT image_id, source_device, date_path, shooting_date FROM (
+         SELECT image_id, source_device, date_path, shooting_date FROM photos
          WHERE user_id = ? AND is_deleted = 0 AND shooting_date = ? AND image_id < ?
          ORDER BY image_id DESC
          LIMIT 1
@@ -178,7 +196,7 @@ export async function getOlderNeighbor(
        LIMIT 1`,
     )
     .bind(userId, shootingDate, userId, shootingDate, imageId)
-    .first<PhotoRow>()
+    .first<PhotoListRow>()
   return row ?? null
 }
 

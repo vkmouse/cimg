@@ -1,6 +1,6 @@
 import type { PutEntityParams } from '../types'
 import * as photoRepository from '../repositories/photoRepository'
-import type { PhotoCursor, PhotoRow } from '../repositories/photoRepository'
+import type { PhotoCursor, PhotoListRow, PhotoRow } from '../repositories/photoRepository'
 import type { SyncableColumn } from '../repositories/syncableTable'
 import * as syncEventService from './syncEventService'
 import {
@@ -35,6 +35,27 @@ export interface PhotoDto {
   exposureJudgement: string | null
   version: number
   isDeleted: boolean
+}
+
+/**
+ * read 路徑（清單頁、詳情頁、詳情頁左右鄰居）共用的精簡 DTO，
+ * 對應 `photoRepository.PhotoListRow`，欄位跟前端 `PhotoItem`/`PhotoDetailResponse` 一致。
+ * 跟 `PhotoDto`（write 路徑，`put()` 組 sync payload 用）區分開來。
+ */
+export interface PhotoListDto {
+  imageId: string
+  sourceDevice: string
+  datePath: string
+  shootingDate: number
+}
+
+function toListDto(row: PhotoListRow): PhotoListDto {
+  return {
+    imageId: row.image_id,
+    sourceDevice: row.source_device,
+    datePath: row.date_path,
+    shootingDate: row.shooting_date,
+  }
 }
 
 function toDto(row: PhotoRow): PhotoDto {
@@ -155,7 +176,7 @@ function parsePhotoPayload(payloadJson: string): PhotoSnakePayload {
 export const DEFAULT_PAGE_SIZE = 50
 
 export interface PhotoListResult {
-  items: PhotoDto[]
+  items: PhotoListDto[]
   nextCursor: PhotoCursor | null
   hasMore: boolean
 }
@@ -174,7 +195,7 @@ export async function getListByUserId(
 
   const hasMore = rows.length > limit
   const pageRows = hasMore ? rows.slice(0, limit) : rows
-  const items = pageRows.map(toDto)
+  const items = pageRows.map(toListDto)
 
   const lastItem = items[items.length - 1]
   const nextCursor: PhotoCursor | null =
@@ -191,9 +212,9 @@ export async function getByImageId(
   db: D1Database,
   userId: string,
   imageId: string,
-): Promise<PhotoDto | null> {
+): Promise<PhotoListDto | null> {
   const row = await photoRepository.getByImageId(db, userId, imageId)
-  return row ? toDto(row) : null
+  return row ? toListDto(row) : null
 }
 
 /**

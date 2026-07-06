@@ -2,7 +2,7 @@ import type { AuthContext, Env } from '../types'
 import * as photoService from '../services/photoService'
 import * as bucketService from '../services/bucketService'
 import { MIDDLE_SUFFIX } from '../services/imageService'
-import type { PhotoDto } from '../services/photoService'
+import type { PhotoListDto } from '../services/photoService'
 import type { BucketDto } from '../services/bucketService'
 import type { PhotoCursor } from '../repositories/photoRepository'
 
@@ -31,7 +31,7 @@ function parseCursor(url: URL): PhotoCursor | null {
  * bucket/keybase/region 皆來自這個使用者自己的 `buckets` 表設定，
  * 跟每一筆照片本身無關，因此在呼叫端只查一次、每筆照片共用。
  */
-function buildImageUrl(photo: PhotoDto, bucket: BucketDto): string {
+function buildImageUrl(photo: PhotoListDto, bucket: BucketDto): string {
   const params = new URLSearchParams({
     imageId: photo.imageId,
     sourceDevice: photo.sourceDevice,
