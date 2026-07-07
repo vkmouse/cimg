@@ -1,10 +1,16 @@
 import type { EntityType, PullEvent } from '../../src/types'
 import * as syncEventRepository from '../repositories/syncEventRepository'
 
-/** 冪等性檢查：這個 mutationId 是否已經處理過了。 */
-export async function isDuplicateMutation(db: D1Database, mutationId: string): Promise<boolean> {
-  const existing = await syncEventRepository.getByMutationId(db, mutationId)
-  return existing !== null
+/**
+ * 批次冪等性檢查：一次查出這批 mutationId 裡，哪些已經處理過了。
+ * 回傳的 Set 供呼叫端在迴圈內用同步的 `set.has(mutationId)` 判斷，
+ * 取代逐筆 SELECT，減少 DB round-trip。
+ */
+export async function getDuplicateMutationIds(
+  db: D1Database,
+  mutationIds: string[],
+): Promise<Set<string>> {
+  return syncEventRepository.getDuplicateMutationIds(db, mutationIds)
 }
 
 /** 回傳給 client 當作下次同步要帶的 lastCursor（即目前 sync_events 最大的 id）。 */

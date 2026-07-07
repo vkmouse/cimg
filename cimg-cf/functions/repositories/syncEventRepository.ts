@@ -9,15 +9,26 @@ export interface SyncEventRow {
   created_at: string
 }
 
-export async function getByMutationId(
+/**
+ * 批次冪等性查詢：一次查出這批 mutationId 裡，哪些已經存在於 sync_events。
+ * 用 `IN (...)` 取代逐筆查詢，減少 DB round-trip。
+ * mutationIds 為空陣列時直接回傳空 Set，不發送 SQL（避免 `IN ()` 語法錯誤）。
+ */
+export async function getDuplicateMutationIds(
   db: D1Database,
-  mutationId: string,
-): Promise<SyncEventRow | null> {
-  const row = await db
-    .prepare(`SELECT * FROM sync_events WHERE mutation_id = ?`)
-    .bind(mutationId)
-    .first<SyncEventRow>()
-  return row ?? null
+  mutationIds: string[],
+): Promise<Set<string>> {
+  if (mutationIds.length === 0) {
+    return new Set()
+  }
+
+  const placeholders = mutationIds.map(() => '?').join(', ')
+  const result = await db
+    .prepare(`SELECT mutation_id FROM sync_events WHERE mutation_id IN (${placeholders})`)
+    .bind(...mutationIds)
+    .all<{ mutation_id: string }>()
+
+  return new Set(result.results.map((row) => row.mutation_id))
 }
 
 /** 查詢整張表目前的最大 id，供 client 下次同步時當作 lastCursor 帶回來；表格還沒有任何資料就回傳 0。 */

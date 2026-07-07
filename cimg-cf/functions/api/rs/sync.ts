@@ -88,26 +88,44 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   }
 
   const { DB } = context.env
-  const pushResults: PushResult[] = []
   // 本次請求帶來的所有 mutationId（不論驗證/寫入結果如何），pull 階段要排除，
   // 避免把發起者自己剛推上去的事件原封不動地回傳給它自己。
   const requestMutationIds: string[] = []
 
-  for (const rawCommand of body.pushCommands) {
-    let command: PushCommand
+  // Pass 1：先驗證每個 command 的形狀，同時收集合法 command 的 mutationId，
+  // 供下面的批次冪等性查詢使用。不合法的 command 直接產生 ERROR 結果，
+  // 用陣列位置對應原本的 pushCommands 順序。
+  type ValidatedEntry = { ok: true; command: PushCommand } | { ok: false; result: PushResult }
+
+  const validated: ValidatedEntry[] = body.pushCommands.map((rawCommand) => {
     try {
-      command = validateCommand(rawCommand)
+      const command = validateCommand(rawCommand)
+      requestMutationIds.push(command.mutationId)
+      return { ok: true, command }
     } catch {
-      pushResults.push({ mutationId: extractMutationId(rawCommand), status: 'ERROR' })
+      return { ok: false, result: { mutationId: extractMutationId(rawCommand), status: 'ERROR' } }
+    }
+  })
+
+  // 批次冪等性查詢：一次查完這批合法 command 裡哪些 mutationId 已經處理過，
+  // 取代逐筆 SELECT，減少 DB round-trip。
+  const duplicateMutationIds = await syncEventService.getDuplicateMutationIds(DB, requestMutationIds)
+
+  // Pass 2：逐筆處理合法 command，冪等性判斷改用上面查好的 Set 同步比對，
+  // 其餘行為（各自獨立驗證、獨立 try/catch、獨立成功/失敗）維持不變。
+  const pushResults: PushResult[] = []
+
+  for (const entry of validated) {
+    if (!entry.ok) {
+      pushResults.push(entry.result)
       continue
     }
 
-    requestMutationIds.push(command.mutationId)
+    const command = entry.command
 
     try {
       // 冪等性檢查：這個 mutationId 已經處理過就直接跳過，不重複寫入。
-      const isDuplicate = await syncEventService.isDuplicateMutation(DB, command.mutationId)
-      if (isDuplicate) {
+      if (duplicateMutationIds.has(command.mutationId)) {
         pushResults.push({ mutationId: command.mutationId, status: 'SKIPPED' })
         continue
       }
