@@ -6,6 +6,12 @@
           <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
         </svg>
       </button>
+
+      <!-- 拍攝時間藥丸：置中顯示，第一行日期、第二行時間 -->
+      <div v-if="capturedAt" class="captured-pill">
+        <span class="captured-pill__date">{{ capturedAt.date }}</span>
+        <span class="captured-pill__time">{{ capturedAt.time }}</span>
+      </div>
     </header>
 
     <div class="photo-detail-content">
@@ -142,6 +148,35 @@ const error = computed(() => {
   return queryError.value instanceof Error ? queryError.value.message : String(queryError.value);
 });
 
+// shootingDate 是秒為單位的 unix timestamp，轉成毫秒給 Date 用。
+function formatCapturedAt(shootingDate: number): { date: string; time: string } {
+  const d = new Date(shootingDate * 1000);
+
+  const yyyy = d.getFullYear();
+  const MM = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+
+  let hours = d.getHours();
+  const minutes = String(d.getMinutes()).padStart(2, "0");
+  const period = hours < 12 ? "上午" : "下午";
+  hours = hours % 12;
+  if (hours === 0) hours = 12;
+
+  return {
+    date: `${yyyy}年${MM}月${dd}日`,
+    time: `${period}${hours}:${minutes}`,
+  };
+}
+
+// 只在拿到目前這張照片的真實資料時顯示，切換上一張/下一張的過渡期間（query 還在 pending）先不顯示，
+// 避免顯示到舊照片的拍攝時間。
+const capturedAt = computed(() => {
+  if (status.value !== "success") return null;
+  const detail = data.value as PhotoDetailResponse | null;
+  if (!detail) return null;
+  return formatCapturedAt(detail.shootingDate);
+});
+
 // prev/next 只在 query 真的 success 之後才有值：query 還在 pending 時自然是 null，
 // 按鈕就會因為 template 上的 :disabled="!prev" / "!next" 自動擋住，不用另外管「fetch 還沒完成」這件事。
 const prev = computed<PhotoNeighbor | null>(() =>
@@ -226,6 +261,9 @@ function navigateTo(target: PhotoNeighbor | null) {
   position: sticky;
   top: 0;
   z-index: 10;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
   padding: var(--header-padding-top) var(--header-padding-x) var(--header-padding-bottom);
   background-color: var(--bg-base);
 }
@@ -234,6 +272,7 @@ function navigateTo(target: PhotoNeighbor | null) {
   display: flex;
   align-items: center;
   justify-content: center;
+  justify-self: start;
   width: 40px;
   height: 40px;
   margin: -8px;
@@ -247,6 +286,33 @@ function navigateTo(target: PhotoNeighbor | null) {
 .back-button svg {
   width: 24px;
   height: 24px;
+}
+
+.captured-pill {
+  grid-column: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 4px 16px;
+  border-radius: 999px;
+  background-color: rgb(255 255 255 / 12%);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.captured-pill__date {
+  font-size: var(--font-caption);
+  font-weight: 600;
+  color: var(--label-primary);
+}
+
+.captured-pill__time {
+  font-size: 11px;
+  color: var(--label-secondary);
 }
 
 .photo-detail-content {
