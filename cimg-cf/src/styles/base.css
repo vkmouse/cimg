@@ -21,6 +21,7 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 /* 全站可見的鍵盤焦點環，符合無障礙基本門檻 */
