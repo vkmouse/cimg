@@ -42,7 +42,7 @@ import PhotoGrid from "../components/photo/PhotoGrid.vue";
 import PhotoSkeleton from "../components/photo/PhotoSkeleton.vue";
 import PhotoEmptyState from "../components/photo/PhotoEmptyState.vue";
 
-const { photos, loading, loadingMore, error, hasMore, load, loadMore } = usePhotoLibrary();
+const { photos, loading, loadingMore, error, hasMore, loadMore } = usePhotoLibrary();
 
 const sentinel = ref<HTMLElement | null>(null);
 let observer: IntersectionObserver | null = null;
@@ -70,7 +70,6 @@ watch(sentinel, (el, prevEl) => {
 
 onMounted(() => {
   setupObserver();
-  load();
 });
 
 onBeforeUnmount(() => {

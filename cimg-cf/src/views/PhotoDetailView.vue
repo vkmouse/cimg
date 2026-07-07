@@ -20,14 +20,7 @@
       <PhotoEmptyState v-else-if="notFound" variant="empty" message="找不到這張照片" />
 
       <!-- 正常顯示 -->
-      <img
-        v-else-if="imageUrl"
-        :src="imageUrl"
-        alt="照片"
-        class="photo-detail-img"
-        @load="onImageSettled"
-        @error="onImageSettled"
-      />
+      <img v-else-if="imageUrl" ref="imgEl" :src="imageUrl" alt="照片" class="photo-detail-img" />
 
       <!-- 上一張（往右） -->
       <button
@@ -59,34 +52,129 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { useRouter } from "vue-router";
+import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { fetchPhotoDetail } from "../services/api";
 import PhotoEmptyState from "../components/photo/PhotoEmptyState.vue";
-import type { PhotoNeighbor } from "../types";
+import type { PhotoDetailResponse, PhotoNeighbor } from "../types";
 
 const props = defineProps<{
   id: string;
 }>();
 
 const router = useRouter();
+const queryClient = useQueryClient();
 
-const imageUrl = ref<string | null>(null);
-const notFound = ref(false);
-const error = ref<string | null>(null);
-const prev = ref<PhotoNeighbor | null>(null);
-const next = ref<PhotoNeighbor | null>(null);
-// 背景補資料中：true 時代表新照片的 prev/next 還沒確定，或圖片還沒下載完成，先擋住按鈕避免連點
-const isNavigating = ref(false);
-// 背景 fetch（補齊 prev/next）是否已完成
-const fetchSettled = ref(true);
-// 目前這張圖片是否已經下載完成（不論成功或失敗）。沒有圖可看（notFound）時視為已完成，不用等
+function detailQueryKey(id: string) {
+  return ["photo-detail", id] as const;
+}
+
+// fetchPhotoDetail 對 404 回傳 null（代表「找不到這張照片」），這不是查詢層面的錯誤，
+// 讓它成為 query 的正常成功結果（data === null），跟真正的網路/伺服器錯誤（會被 throw、進 query 的 error 狀態）分開。
+function queryPhotoDetail(id: string) {
+  return fetchPhotoDetail(id);
+}
+
+// query key 跟著 route 上的 id 走：無論是用 goPrev/goNext 切換、直接用網址打開、或瀏覽器上一頁/下一頁，
+// 都是統一走這一條 query，不用再自己管「這次要不要重新 loadDetail」。
+const { data, error: queryError, status } = useQuery({
+  queryKey: computed(() => detailQueryKey(props.id)),
+  queryFn: () => queryPhotoDetail(props.id),
+});
+
+// 拿到目前照片的資料後，順手把 prev/next 的 detail 也背景 prefetch 起來（不等結果、不影響畫面），
+// 這樣使用者真的按下一頁時，新照片自己的 prev/next 通常已經在 cache 裡，不用再等 fetch。
+watch(
+  data,
+  (detail) => {
+    prefetchNeighbor(detail?.prev ?? null);
+    prefetchNeighbor(detail?.next ?? null);
+  },
+  { immediate: true },
+);
+
+function prefetchNeighbor(neighbor: PhotoNeighbor | null) {
+  if (!neighbor) return;
+  queryClient.prefetchQuery({
+    queryKey: detailQueryKey(neighbor.imageId),
+    queryFn: () => queryPhotoDetail(neighbor.imageId),
+  });
+}
+
+// 按下上/下一頁那一刻，手上已經知道目標照片的 imageUrl（來自目前這張的 prev/next），
+// 在新照片自己的 query 還沒 resolve（沒 cache 可用）之前，先拿這個頂著顯示，避免畫面被清空閃爍。
+// 一旦新照片的 query 進入 success 狀態，畫面就會改用 query 的真實資料，這個值就不再被參考。
+const optimisticImageUrl = ref<string | null>(null);
+const optimisticNotFound = ref(false);
+
+const imageUrl = computed<string | null>(() => {
+  if (status.value === "success") return (data.value as PhotoDetailResponse | null)?.imageUrl ?? null;
+  if (status.value === "pending") return optimisticImageUrl.value;
+  return null;
+});
+
+const notFound = computed(() => {
+  if (status.value === "success") return data.value === null;
+  if (status.value === "pending") return optimisticNotFound.value;
+  return false;
+});
+
+const error = computed(() => {
+  if (status.value !== "error") return null;
+  return queryError.value instanceof Error ? queryError.value.message : String(queryError.value);
+});
+
+// prev/next 只在 query 真的 success 之後才有值：query 還在 pending 時自然是 null，
+// 按鈕就會因為 template 上的 :disabled="!prev" / "!next" 自動擋住，不用另外管「fetch 還沒完成」這件事。
+const prev = computed<PhotoNeighbor | null>(() =>
+  status.value === "success" ? (data.value?.prev ?? null) : null,
+);
+const next = computed<PhotoNeighbor | null>(() =>
+  status.value === "success" ? (data.value?.next ?? null) : null,
+);
+
+// 圖片是否已經下載完成（成功或失敗皆算「已解決」，避免使用者被一張壞圖卡住、按了跳不過去）。
+// 用實際渲染出來的 <img> 呼叫原生 decode()，不用另外接 @load/@error，也不用額外套件。
+const imgEl = ref<HTMLImageElement | null>(null);
 const imageSettled = ref(true);
 
-// 用 goPrev/goNext 切換時，route 的 props.id 也會跟著變、觸發下面的 watch。
-// 但這種情況我們已經自己處理過畫面狀態了，不需要 watch 再跑一次 loadDetail（會清空畫面造成閃爍），
-// 所以用這個非 reactive 旗標讓 watch 跳過那一次。
-let skipWatch = false;
+watch(
+  imageUrl,
+  async (url) => {
+    if (!url) {
+      imageSettled.value = true;
+      return;
+    }
+    imageSettled.value = false;
+
+    // <img> 的 :src 是綁著這個 computed 值，要等 DOM 真的更新完才能拿到對應的 element
+    await nextTick();
+    const el = imgEl.value;
+    if (!el) {
+      // 拿不到 element 就不要卡住使用者
+      imageSettled.value = true;
+      return;
+    }
+
+    try {
+      await el.decode();
+    } catch {
+      // 下載失敗或圖片本身損毀，也視為「已解決」
+    } finally {
+      // 如果這段 await 期間 imageUrl 又換成別的值了（使用者連續切換），
+      // 這次 decode() 的結果就跟目前畫面對不上了，不要回頭誤設 imageSettled
+      if (imageUrl.value === url) {
+        imageSettled.value = true;
+      }
+    }
+  },
+  { immediate: true },
+);
+
+// 兩個條件都滿足才能再按下一頁：新照片自己的 prev/next 已經確定（query success），
+// 而且目前顯示的這張圖片已經下載完成
+const isNavigating = computed(() => !imageSettled.value);
 
 function goBack() {
   router.back();
@@ -103,113 +191,11 @@ function goNext() {
 function navigateTo(target: PhotoNeighbor | null) {
   if (!target || isNavigating.value) return;
 
-  isNavigating.value = true;
-  fetchSettled.value = false;
+  optimisticImageUrl.value = target.imageUrl;
+  optimisticNotFound.value = !target.imageUrl;
 
-  // 立刻用手上已有的資料顯示新照片，不清空畫面
-  if (target.imageUrl) {
-    setImage(target.imageUrl);
-    notFound.value = false;
-  } else {
-    setImage(null);
-    notFound.value = true;
-  }
-  error.value = null;
-  // 新照片自己的 prev/next 還不知道，先清空 -> 按鈕會因為 !prev / !next 自然呈現 disabled
-  prev.value = null;
-  next.value = null;
-
-  // 立刻換網址
-  skipWatch = true;
   router.replace({ name: "photo-detail", params: { id: target.imageId } });
-
-  // 背景打 API 補齊真正的 prev/next（並校正 imageUrl/notFound，以防手上的資料跟最新狀態不一致）
-  fetchDetailInBackground(target.imageId);
 }
-
-async function fetchDetailInBackground(id: string) {
-  try {
-    const detail = await fetchPhotoDetail(id);
-    if (!detail || !detail.imageUrl) {
-      notFound.value = true;
-      setImage(null);
-      prev.value = detail?.prev ?? null;
-      next.value = detail?.next ?? null;
-    } else {
-      setImage(detail.imageUrl);
-      notFound.value = false;
-      prev.value = detail.prev;
-      next.value = detail.next;
-    }
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : String(err);
-    // 發生錯誤已經沒有圖片可等，直接解除鎖定，讓使用者可以繼續操作（例如按上一頁離開錯誤狀態）
-    isNavigating.value = false;
-    return;
-  }
-
-  fetchSettled.value = true;
-  tryFinishNavigating();
-}
-
-// 設定要顯示的圖片網址，並同步重置「圖片是否下載完成」的狀態（不依賴 watch，避免非同步批次執行造成的時序問題）。
-// 只有網址「真的改變」時才重置 imageSettled：
-// 如果網址沒變（例如 fetch 補齊資料時發現跟手上已有的一樣），代表 <img> 的 src 不會變、瀏覽器不會重新觸發 load/error，
-// 這時不能重置，否則會卡住永遠等不到下一次 load 事件。
-function setImage(url: string | null) {
-  const changed = imageUrl.value !== url;
-  imageUrl.value = url;
-  if (changed) {
-    imageSettled.value = !url;
-  }
-}
-
-// 圖片下載完成（成功或失敗皆算）時觸發：失敗也視為「已解決」，避免使用者被一張壞圖卡住、無法跳到下一頁
-function onImageSettled() {
-  imageSettled.value = true;
-  tryFinishNavigating();
-}
-
-// 只有「背景資料 fetch 完成」且「圖片下載完成」兩者都滿足時，才解除按鈕鎖定
-function tryFinishNavigating() {
-  if (fetchSettled.value && imageSettled.value) {
-    isNavigating.value = false;
-  }
-}
-
-// 初次進入 detail 頁（例如從列表點縮圖、或直接用網址打開）走完整載入流程
-async function loadDetail(id: string) {
-  imageUrl.value = null;
-  notFound.value = false;
-  error.value = null;
-  prev.value = null;
-  next.value = null;
-
-  try {
-    const detail = await fetchPhotoDetail(id);
-    if (!detail || !detail.imageUrl) {
-      notFound.value = true;
-      return;
-    }
-    imageUrl.value = detail.imageUrl;
-    prev.value = detail.prev;
-    next.value = detail.next;
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : String(err);
-  }
-}
-
-watch(
-  () => props.id,
-  (id) => {
-    if (skipWatch) {
-      skipWatch = false;
-      return;
-    }
-    loadDetail(id);
-  },
-  { immediate: true },
-);
 </script>
 
 <style scoped>
