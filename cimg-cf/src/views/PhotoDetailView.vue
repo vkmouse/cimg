@@ -85,11 +85,14 @@ const { data, error: queryError, status } = useQuery({
 
 // 拿到目前照片的資料後，順手把 prev/next 的 detail 也背景 prefetch 起來（不等結果、不影響畫面），
 // 這樣使用者真的按下一頁時，新照片自己的 prev/next 通常已經在 cache 裡，不用再等 fetch。
+// 同時也把 prev/next 的「圖片本身」背景預先下載好（見 preloadImage），讓瀏覽器提早把圖存進 HTTP cache。
 watch(
   data,
   (detail) => {
     prefetchNeighbor(detail?.prev ?? null);
     prefetchNeighbor(detail?.next ?? null);
+    preloadImage(detail?.prev?.imageUrl ?? null);
+    preloadImage(detail?.next?.imageUrl ?? null);
   },
   { immediate: true },
 );
@@ -100,6 +103,20 @@ function prefetchNeighbor(neighbor: PhotoNeighbor | null) {
     queryKey: detailQueryKey(neighbor.imageId),
     queryFn: () => queryPhotoDetail(neighbor.imageId),
   });
+}
+
+// 記錄已經觸發過預下載的網址，避免同一張圖被重複建立 Image() 物件、重複打一次請求
+// （瀏覽器本身雖然也會依 HTTP cache 規則 dedupe，但沒必要每次都重新觸發）
+const preloadedUrls = new Set<string>();
+
+function preloadImage(url: string | null) {
+  if (!url || preloadedUrls.has(url)) return;
+  preloadedUrls.add(url);
+
+  // 不掛到畫面上，純粹讓瀏覽器背景下載並放進 HTTP cache；
+  // 之後真正切換過去、<img> 用同一個網址時，會直接吃 cache，decode() 幾乎是秒開
+  const img = new Image();
+  img.src = url;
 }
 
 // 按下上/下一頁那一刻，手上已經知道目標照片的 imageUrl（來自目前這張的 prev/next），
