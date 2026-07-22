@@ -67,6 +67,17 @@ pub fn run() -> wry::Result<()> {
         return Ok(());
     }
 
+    // --update-photo-bursts 有帶就走密集拍照區間偵測流程,同樣不開 window / webview。
+    // 純粹讀寫本機 db,跟網路/webview 無關,不需要用到 `config`。
+    if has_flag("--update-photo-bursts") {
+        println!("[app] --update-photo-bursts 模式,跳過 webview 登入流程");
+        if let Err(e) = crate::photo_bursts::run(&db_path) {
+            eprintln!("[photo_bursts] 錯誤: {e}");
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
+
     let webview_data_dir = data_dir.join("webview_data");
     std::fs::create_dir_all(&webview_data_dir).expect("無法建立 webview 資料目錄");
 

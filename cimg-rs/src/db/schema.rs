@@ -81,6 +81,19 @@ CREATE TABLE IF NOT EXISTS photos (
 );
 "#;
 
+const CREATE_PHOTO_BURSTS: &str = r#"
+CREATE TABLE IF NOT EXISTS photo_bursts (
+    user_id     TEXT    NOT NULL,
+    start_date  INTEGER NOT NULL,
+    end_date    INTEGER NOT NULL,
+    total_count INTEGER NOT NULL,
+    span_days   INTEGER NOT NULL,
+    version     INTEGER NOT NULL DEFAULT 1,
+    is_deleted  INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (user_id, start_date)
+);
+"#;
+
 const CREATE_SYNC_QUEUE: &str = r#"
 CREATE TABLE IF NOT EXISTS sync_queue (
     mutation_id     TEXT NOT NULL PRIMARY KEY,
@@ -106,6 +119,7 @@ pub fn init(conn: &Connection) -> Result<()> {
     conn.execute_batch(CREATE_CREDENTIALS)?;
     conn.execute_batch(CREATE_BUCKETS)?;
     conn.execute_batch(CREATE_PHOTOS)?;
+    conn.execute_batch(CREATE_PHOTO_BURSTS)?;
     conn.execute_batch(CREATE_SYNC_QUEUE)?;
     conn.execute_batch(CREATE_SYNC_META)?;
     Ok(())

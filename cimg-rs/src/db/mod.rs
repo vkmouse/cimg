@@ -14,6 +14,7 @@ mod sync_meta;
 pub mod photos;
 pub mod buckets;
 pub mod credentials;
+pub mod photo_bursts;
 pub mod sync_queue;
 pub mod users;
 
@@ -153,6 +154,23 @@ impl Database {
                 Ok(())
             }
         }
+    }
+
+    /// 查出 `photos` 表裡目前所有出現過的 `user_id`,供 `--update-photo-bursts`
+    /// 模式 foreach 使用。
+    pub fn list_user_ids(&self) -> Result<Vec<String>> {
+        photo_bursts::list_user_ids(&self.conn)
+    }
+
+    /// 依本地曆日聚合指定使用者的每日照片張數,供密集拍照區間演算法使用。
+    pub fn daily_photo_counts(&self, user_id: &str) -> Result<Vec<photo_bursts::DayCount>> {
+        photo_bursts::daily_counts(&self.conn, user_id)
+    }
+
+    /// 把某個使用者這次全量重算出來的密集區間結果同步進 `photo_bursts` 表
+    /// (新增/更新/軟刪除,規則見 `db::photo_bursts::sync_bursts`)。
+    pub fn sync_user_bursts(&self, user_id: &str, computed: &[photo_bursts::ComputedBurst]) -> Result<()> {
+        photo_bursts::sync_bursts(&self.conn, user_id, computed)
     }
 
     /// 套用一筆從 CF 拉回來的 pull event,寫入 (或覆蓋) 對應的本地記錄。
