@@ -62,33 +62,53 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { fetchPhotoDetail } from "../services/api";
 import PhotoEmptyState from "../components/photo/PhotoEmptyState.vue";
-import type { PhotoDetailResponse } from "../types";
+import { dateKeysToFilter, isValidDateKey } from "../utils/dateRange";
+import type { PhotoDateFilter, PhotoDetailResponse, PhotoSortOrder } from "../types";
 
 const props = defineProps<{
   id: string;
 }>();
 
+const route = useRoute();
 const router = useRouter();
 const queryClient = useQueryClient();
 
-function detailQueryKey(id: string) {
-  return ["photo-detail", id] as const;
+// 排序/篩選狀態的唯一來源是網址 query（?sort=&start=&end=），跟 LibraryView 用同一套規則：
+// 只有 `sort=asc` 才是舊到新；start/end 需成對且合法（YYYY-MM-DD、start<=end）才視為有效篩選。
+// 這裡故意不用 ref 存起來，直接每次從 route.query 算，換頁（goPrev/goNext）時 query 不變、
+// 使用者從瀏覽器上一頁/下一頁回來時 route.query 本來就會自動更新，不用額外同步。
+const sortOrder = computed<PhotoSortOrder>(() => (route.query.sort === "asc" ? "asc" : "desc"));
+
+const dateFilter = computed<PhotoDateFilter | null>(() => {
+  const start = route.query.start;
+  const end = route.query.end;
+  const startKey = typeof start === "string" ? start : null;
+  const endKey = typeof end === "string" ? end : null;
+  if (!isValidDateKey(startKey) || !isValidDateKey(endKey) || startKey > endKey) {
+    return null;
+  }
+  return dateKeysToFilter(startKey, endKey);
+});
+
+function detailQueryKey(id: string, filter: PhotoDateFilter | null, sort: PhotoSortOrder) {
+  return ["photo-detail", id, filter, sort] as const;
 }
 
 // fetchPhotoDetail 對 404 回傳 null（代表「找不到這張照片」），這不是查詢層面的錯誤，
 // 讓它成為 query 的正常成功結果（data === null），跟真正的網路/伺服器錯誤（會被 throw、進 query 的 error 狀態）分開。
 function queryPhotoDetail(id: string) {
-  return fetchPhotoDetail(id);
+  return fetchPhotoDetail(id, dateFilter.value, sortOrder.value);
 }
 
 // query key 跟著 route 上的 id 走：無論是用 goPrev/goNext 切換、直接用網址打開、或瀏覽器上一頁/下一頁，
 // 都是統一走這一條 query，不用再自己管「這次要不要重新 loadDetail」。
+// key 也帶上 sort/dateFilter：篩選條件變了視為全新的查詢，避免沿用到別的篩選條件下快取的 prev/next。
 const { data, error: queryError, status } = useQuery({
-  queryKey: computed(() => detailQueryKey(props.id)),
+  queryKey: computed(() => detailQueryKey(props.id, dateFilter.value, sortOrder.value)),
   queryFn: () => queryPhotoDetail(props.id),
 });
 
@@ -107,7 +127,7 @@ watch(
 function prefetchNeighbor(neighborId: string | null) {
   if (!neighborId) return;
   queryClient.prefetchQuery({
-    queryKey: detailQueryKey(neighborId),
+    queryKey: detailQueryKey(neighborId, dateFilter.value, sortOrder.value),
     queryFn: () => queryPhotoDetail(neighborId),
   });
 }
@@ -216,7 +236,7 @@ function goNext() {
 
 function navigateTo(targetId: string | null) {
   if (!targetId) return;
-  router.replace({ name: "photo-detail", params: { id: targetId } });
+  router.replace({ name: "photo-detail", params: { id: targetId }, query: route.query });
 }
 </script>
 

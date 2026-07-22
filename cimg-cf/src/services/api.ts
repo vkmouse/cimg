@@ -52,9 +52,25 @@ export async function fetchPhotoItems(
  * 取得單張照片的詳細資料（含 imageUrl 原圖 + thumbnailUrl 縮圖兩種尺寸）。
  * 查無此照片（不存在 / 不屬於自己）時 API 回 404，這裡回傳 null 讓呼叫端視為「找不到這張照片」。
  * 其他非 2xx（網路壞掉、伺服器錯誤）則拋出例外，呼叫端視為「錯誤狀態」。
+ *
+ * `filter`/`sort` 帶入時會決定 `prev`/`next` 鄰居的查詢範圍與方向，組法跟 `fetchPhotoItems` 一致：
+ * 詳情頁需要跟清單頁當下的篩選/排序狀態一致，換頁（上一張／下一張）時鄰居才不會跳出篩選範圍。
  */
-export async function fetchPhotoDetail(imageId: string): Promise<PhotoDetailResponse | null> {
-  const res = await fetch(`/api/photos/${encodeURIComponent(imageId)}`);
+export async function fetchPhotoDetail(
+  imageId: string,
+  filter?: PhotoDateFilter | null,
+  sort?: PhotoSortOrder,
+): Promise<PhotoDetailResponse | null> {
+  const params = new URLSearchParams();
+  if (filter) {
+    params.set("startDate", String(filter.startDate));
+    params.set("endDate", String(filter.endDate));
+  }
+  if (sort === "asc") {
+    params.set("sort", "asc");
+  }
+  const query = params.toString();
+  const res = await fetch(`/api/photos/${encodeURIComponent(imageId)}${query ? `?${query}` : ""}`);
   if (res.status === 404) {
     return null;
   }

@@ -1,6 +1,6 @@
 <template>
   <RouterLink
-    :to="{ name: 'photo-detail', params: { id: imageId } }"
+    :to="{ name: 'photo-detail', params: { id: imageId }, query: route.query }"
     class="photo-cell"
     :class="{ 'photo-cell--pressed': pressed }"
   >
@@ -23,7 +23,7 @@
 
 <script setup lang="ts">
 import { ref } from "vue";
-import { RouterLink } from "vue-router";
+import { RouterLink, useRoute } from "vue-router";
 
 defineProps<{
   src: string;
@@ -33,6 +33,7 @@ defineProps<{
 
 const loaded = ref(false);
 const pressed = ref(false);
+const route = useRoute();
 </script>
 
 <style scoped>
