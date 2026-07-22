@@ -5,7 +5,8 @@ import { EXTRA_LARGE_SUFFIX, MIDDLE_SUFFIX } from '../../services/imageService'
 import type { PhotoListDto } from '../../services/photoService'
 import type { BucketDto } from '../../services/bucketService'
 import * as photoRepository from '../../repositories/photoRepository'
-import type { PhotoListRow } from '../../repositories/photoRepository'
+import type { PhotoListRow, PhotoSortOrder } from '../../repositories/photoRepository'
+import { parseDateRange, parseSortOrder } from '../photoQueryParams'
 
 /**
  * 組出 `/api/img` 可直接使用的相對網址。
@@ -42,10 +43,26 @@ function buildNeighborPayload(row: PhotoListRow | null): string | null {
   return row ? row.image_id : null
 }
 
+/**
+ * prev/next 對應「更新／更舊的鄰居」的方向要看 `sortOrder`：
+ * - `desc`（預設，清單新到舊）：prev = 更新的鄰居、next = 更舊的鄰居
+ * - `asc`（清單舊到新）：prev = 更舊的鄰居、next = 更新的鄰居（跟 desc 相反）
+ */
+function resolveNeighbors(
+  sortOrder: PhotoSortOrder,
+  newerRow: PhotoListRow | null,
+  olderRow: PhotoListRow | null,
+): { prev: PhotoListRow | null; next: PhotoListRow | null } {
+  return sortOrder === 'asc' ? { prev: olderRow, next: newerRow } : { prev: newerRow, next: olderRow }
+}
+
 export const onRequest: PagesFunction<Env, 'id', AuthContext> = async (context) => {
   const { DB } = context.env
   const { userId } = context.data
   const imageId = context.params.id as string
+  const url = new URL(context.request.url)
+  const dateRange = parseDateRange(url)
+  const sortOrder = parseSortOrder(url)
 
   try {
     const [photo, bucket] = await Promise.all([
@@ -59,10 +76,12 @@ export const onRequest: PagesFunction<Env, 'id', AuthContext> = async (context) 
 
     // 拿到 current 之後才知道 shootingDate，用它去平行查左右鄰居；
     // bucket 已經查過了，這裡不用再查一次。
+    // 鄰居查詢帶入 dateRange：區間內查不到不代表全體時間軸上沒有，只是這個篩選條件下沒有。
     const [newerRow, olderRow] = await Promise.all([
-      photoRepository.getNewerNeighbor(DB, userId, photo.shootingDate, photo.imageId),
-      photoRepository.getOlderNeighbor(DB, userId, photo.shootingDate, photo.imageId),
+      photoRepository.getNewerNeighbor(DB, userId, photo.shootingDate, photo.imageId, dateRange),
+      photoRepository.getOlderNeighbor(DB, userId, photo.shootingDate, photo.imageId, dateRange),
     ])
+    const { prev, next } = resolveNeighbors(sortOrder, newerRow, olderRow)
 
     return Response.json({
       imageId: photo.imageId,
@@ -71,8 +90,8 @@ export const onRequest: PagesFunction<Env, 'id', AuthContext> = async (context) 
       shootingDate: photo.shootingDate,
       imageUrl: bucket ? buildImageUrl(photo, bucket) : null,
       thumbnailUrl: bucket ? buildThumbnailUrl(photo, bucket) : null,
-      prev: buildNeighborPayload(newerRow),
-      next: buildNeighborPayload(olderRow),
+      prev: buildNeighborPayload(prev),
+      next: buildNeighborPayload(next),
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)

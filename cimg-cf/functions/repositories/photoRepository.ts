@@ -167,7 +167,7 @@ export async function getByImageId(
 }
 
 /**
- * 找「更新的鄰居」（prev，方向定義見規格 1.1）：
+ * 找「更新的鄰居」（方向定義見規格 1.1）：
  * shooting_date DESC, image_id DESC 排序下，排在目前這筆「前面」的下一筆。
  *
  * 註：這裡故意不寫成單一個 `(shooting_date > ? OR (shooting_date = ? AND image_id > ?))`
@@ -176,66 +176,78 @@ export async function getByImageId(
  * 增加（實測：30 萬筆資料時，依 threshold 位置耗時可從 <0.01ms 惡化到 18ms+）。
  * 拆成兩段各自能被索引直接 seek 的查詢、取各自前 1 筆後用 UNION ALL 合併再排序取第一筆，
  * 不管資料量多大、鄰居距離多遠，耗時都能維持在 O(log n)。
+ *
+ * `dateRange` 帶入時，額外要求 `shooting_date BETWEEN ? AND ?`（含端點），理由跟
+ * `getListByUserId` 一致：這個條件需要同時加在 UNION ALL 的兩段子查詢裡，兩段才都能各自被
+ * 索引直接 seek。此時「找不到」（回傳 null）代表區間內沒有更新的鄰居，不代表全體時間軸上沒有。
  */
 export async function getNewerNeighbor(
   db: D1Database,
   userId: string,
   shootingDate: number,
   imageId: string,
+  dateRange: PhotoDateRange | null = null,
 ): Promise<PhotoListRow | null> {
+  const dateClause = dateRange ? 'AND shooting_date BETWEEN ? AND ?' : ''
+  const dateBinds = dateRange ? [dateRange.startDate, dateRange.endDate] : []
+
   const row = await db
     .prepare(
       `SELECT image_id, source_device, date_path, shooting_date FROM (
          SELECT image_id, source_device, date_path, shooting_date FROM photos
-         WHERE user_id = ? AND is_deleted = 0 AND shooting_date > ?
+         WHERE user_id = ? AND is_deleted = 0 AND shooting_date > ? ${dateClause}
          ORDER BY shooting_date ASC, image_id ASC
          LIMIT 1
        )
        UNION ALL
        SELECT image_id, source_device, date_path, shooting_date FROM (
          SELECT image_id, source_device, date_path, shooting_date FROM photos
-         WHERE user_id = ? AND is_deleted = 0 AND shooting_date = ? AND image_id > ?
+         WHERE user_id = ? AND is_deleted = 0 AND shooting_date = ? AND image_id > ? ${dateClause}
          ORDER BY image_id ASC
          LIMIT 1
        )
        ORDER BY shooting_date ASC, image_id ASC
        LIMIT 1`,
     )
-    .bind(userId, shootingDate, userId, shootingDate, imageId)
+    .bind(userId, shootingDate, ...dateBinds, userId, shootingDate, imageId, ...dateBinds)
     .first<PhotoListRow>()
   return row ?? null
 }
 
 /**
- * 找「更舊的鄰居」（next，方向定義見規格 1.1）：
+ * 找「更舊的鄰居」（方向定義見規格 1.1）：
  * shooting_date DESC, image_id DESC 排序下，排在目前這筆「後面」的下一筆。
- * 拆成 UNION ALL 兩段的原因同 `getNewerNeighbor`。
+ * 拆成 UNION ALL 兩段、`dateRange` 的處理方式皆同 `getNewerNeighbor`。
  */
 export async function getOlderNeighbor(
   db: D1Database,
   userId: string,
   shootingDate: number,
   imageId: string,
+  dateRange: PhotoDateRange | null = null,
 ): Promise<PhotoListRow | null> {
+  const dateClause = dateRange ? 'AND shooting_date BETWEEN ? AND ?' : ''
+  const dateBinds = dateRange ? [dateRange.startDate, dateRange.endDate] : []
+
   const row = await db
     .prepare(
       `SELECT image_id, source_device, date_path, shooting_date FROM (
          SELECT image_id, source_device, date_path, shooting_date FROM photos
-         WHERE user_id = ? AND is_deleted = 0 AND shooting_date < ?
+         WHERE user_id = ? AND is_deleted = 0 AND shooting_date < ? ${dateClause}
          ORDER BY shooting_date DESC, image_id DESC
          LIMIT 1
        )
        UNION ALL
        SELECT image_id, source_device, date_path, shooting_date FROM (
          SELECT image_id, source_device, date_path, shooting_date FROM photos
-         WHERE user_id = ? AND is_deleted = 0 AND shooting_date = ? AND image_id < ?
+         WHERE user_id = ? AND is_deleted = 0 AND shooting_date = ? AND image_id < ? ${dateClause}
          ORDER BY image_id DESC
          LIMIT 1
        )
        ORDER BY shooting_date DESC, image_id DESC
        LIMIT 1`,
     )
-    .bind(userId, shootingDate, userId, shootingDate, imageId)
+    .bind(userId, shootingDate, ...dateBinds, userId, shootingDate, imageId, ...dateBinds)
     .first<PhotoListRow>()
   return row ?? null
 }
