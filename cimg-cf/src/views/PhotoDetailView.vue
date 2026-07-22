@@ -22,18 +22,21 @@
         :message="`無法載入照片，請檢查網路連線後重試。（${error}）`"
       />
 
-      <!-- 空狀態：查無此照片 / 不屬於自己 / 沒有可用的圖片網址 -->
+      <!-- 空狀態：查無此照片 / 不屬於自己 -->
       <PhotoEmptyState v-else-if="notFound" variant="empty" message="找不到這張照片" />
 
-      <!-- 正常顯示 -->
-      <img v-else-if="imageUrl" ref="imgEl" :src="imageUrl" alt="照片" class="photo-detail-img" />
+      <!-- 載入中（換頁後新照片自己的 JSON 還沒回來）：骨架佔位，不顯示上一張的殘影 -->
+      <div v-else-if="isLoading" class="photo-detail-skeleton" aria-hidden="true" />
+
+      <!-- 正常顯示：先是縮圖（thumbnailUrl），原圖（imageUrl）背景下載成功後會自動換成原圖 -->
+      <img v-else-if="displaySrc" :src="displaySrc" alt="照片" class="photo-detail-img" />
 
       <!-- 上一張（往右） -->
       <button
         type="button"
         class="nav-button nav-button--prev"
         aria-label="上一張"
-        :disabled="!prev || isNavigating"
+        :disabled="!prev"
         @click="goPrev"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -46,7 +49,7 @@
         type="button"
         class="nav-button nav-button--next"
         aria-label="下一張"
-        :disabled="!next || isNavigating"
+        :disabled="!next"
         @click="goNext"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -58,12 +61,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { fetchPhotoDetail } from "../services/api";
 import PhotoEmptyState from "../components/photo/PhotoEmptyState.vue";
-import type { PhotoDetailResponse, PhotoNeighbor } from "../types";
+import type { PhotoDetailResponse } from "../types";
 
 const props = defineProps<{
   id: string;
@@ -89,64 +92,80 @@ const { data, error: queryError, status } = useQuery({
   queryFn: () => queryPhotoDetail(props.id),
 });
 
-// 拿到目前照片的資料後，順手把 prev/next 的 detail 也背景 prefetch 起來（不等結果、不影響畫面），
-// 這樣使用者真的按下一頁時，新照片自己的 prev/next 通常已經在 cache 裡，不用再等 fetch。
-// 同時也把 prev/next 的「圖片本身」背景預先下載好（見 preloadImage），讓瀏覽器提早把圖存進 HTTP cache。
+// 拿到目前照片的資料後，順手把 prev/next 的完整 detail（只是 JSON，不含圖片本體）背景 prefetch 起來，
+// 這樣使用者真的按上一頁/下一頁時，新照片自己的這段 API 通常已經在 cache 裡，不用再等。
+// 圖片本體（thumbnailUrl/imageUrl）刻意不在這裡預先下載，等使用者真的切換過去那一頁、看到那張照片時才開始下載。
 watch(
   data,
   (detail) => {
     prefetchNeighbor(detail?.prev ?? null);
     prefetchNeighbor(detail?.next ?? null);
-    preloadImage(detail?.prev?.imageUrl ?? null);
-    preloadImage(detail?.next?.imageUrl ?? null);
   },
   { immediate: true },
 );
 
-function prefetchNeighbor(neighbor: PhotoNeighbor | null) {
-  if (!neighbor) return;
+function prefetchNeighbor(neighborId: string | null) {
+  if (!neighborId) return;
   queryClient.prefetchQuery({
-    queryKey: detailQueryKey(neighbor.imageId),
-    queryFn: () => queryPhotoDetail(neighbor.imageId),
+    queryKey: detailQueryKey(neighborId),
+    queryFn: () => queryPhotoDetail(neighborId),
   });
 }
-
-// 記錄已經觸發過預下載的網址，避免同一張圖被重複建立 Image() 物件、重複打一次請求
-// （瀏覽器本身雖然也會依 HTTP cache 規則 dedupe，但沒必要每次都重新觸發）
-const preloadedUrls = new Set<string>();
-
-function preloadImage(url: string | null) {
-  if (!url || preloadedUrls.has(url)) return;
-  preloadedUrls.add(url);
-
-  // 不掛到畫面上，純粹讓瀏覽器背景下載並放進 HTTP cache；
-  // 之後真正切換過去、<img> 用同一個網址時，會直接吃 cache，decode() 幾乎是秒開
-  const img = new Image();
-  img.src = url;
-}
-
-// 按下上/下一頁那一刻，手上已經知道目標照片的 imageUrl（來自目前這張的 prev/next），
-// 在新照片自己的 query 還沒 resolve（沒 cache 可用）之前，先拿這個頂著顯示，避免畫面被清空閃爍。
-// 一旦新照片的 query 進入 success 狀態，畫面就會改用 query 的真實資料，這個值就不再被參考。
-const optimisticImageUrl = ref<string | null>(null);
-const optimisticNotFound = ref(false);
-
-const imageUrl = computed<string | null>(() => {
-  if (status.value === "success") return (data.value as PhotoDetailResponse | null)?.imageUrl ?? null;
-  if (status.value === "pending") return optimisticImageUrl.value;
-  return null;
-});
-
-const notFound = computed(() => {
-  if (status.value === "success") return data.value === null;
-  if (status.value === "pending") return optimisticNotFound.value;
-  return false;
-});
 
 const error = computed(() => {
   if (status.value !== "error") return null;
   return queryError.value instanceof Error ? queryError.value.message : String(queryError.value);
 });
+
+// 查無此照片：只在 query 真的 success 之後才能判斷，pending 期間（換頁過渡）先不算，避免誤判成 not found。
+const notFound = computed(() => status.value === "success" && data.value === null);
+
+// pending 狀態就是「新照片的 JSON 還沒回來」，畫面顯示骨架（不沿用上一張的殘影）。
+const isLoading = computed(() => status.value === "pending");
+
+// --- 顯示中的圖片網址：縮圖先秒開，原圖背景下載成功後自動升級替換 ---
+// 每次 data 換成新照片時，先把 displaySrc 設成 thumbnailUrl（縮圖不用 preload，直接顯示），
+// 再背景用 new Image() 下載 imageUrl（原圖畫質）；下載成功才把 displaySrc 換成 imageUrl，
+// 下載失敗（或這張根本沒有 imageUrl）就維持顯示 thumbnailUrl，不會卡住使用者。
+const displaySrc = ref<string | null>(null);
+
+// 記錄「已經確認下載成功」的原圖網址：同一張圖之後只要再顯示到，直接沿用不用重新走一次 onload
+// （瀏覽器 HTTP cache 本身也會讓重複下載幾乎瞬間完成，這裡單純避免重複建立 Image() 物件）。
+const loadedFullUrls = new Set<string>();
+
+watch(
+  data,
+  (detail) => {
+    if (!detail) {
+      displaySrc.value = null;
+      return;
+    }
+    displaySrc.value = detail.thumbnailUrl ?? detail.imageUrl ?? null;
+    upgradeToFullImage(detail);
+  },
+  { immediate: true },
+);
+
+function upgradeToFullImage(detail: PhotoDetailResponse) {
+  const fullUrl = detail.imageUrl;
+  if (!fullUrl || fullUrl === detail.thumbnailUrl) return;
+
+  if (loadedFullUrls.has(fullUrl)) {
+    displaySrc.value = fullUrl;
+    return;
+  }
+
+  const img = new Image();
+  img.onload = () => {
+    loadedFullUrls.add(fullUrl);
+    // 下載期間使用者可能已經切到別的照片，只有目前仍在看這張時才切換顯示，避免蓋掉新照片的畫面
+    if (data.value?.imageId === detail.imageId) {
+      displaySrc.value = fullUrl;
+    }
+  };
+  // 下載失敗（onerror）不特別處理，維持顯示 thumbnailUrl 即可
+  img.src = fullUrl;
+}
 
 // shootingDate 是秒為單位的 unix timestamp，轉成毫秒給 Date 用。
 function formatCapturedAt(shootingDate: number): { date: string; time: string } {
@@ -178,55 +197,10 @@ const capturedAt = computed(() => {
 });
 
 // prev/next 只在 query 真的 success 之後才有值：query 還在 pending 時自然是 null，
-// 按鈕就會因為 template 上的 :disabled="!prev" / "!next" 自動擋住，不用另外管「fetch 還沒完成」這件事。
-const prev = computed<PhotoNeighbor | null>(() =>
-  status.value === "success" ? (data.value?.prev ?? null) : null,
-);
-const next = computed<PhotoNeighbor | null>(() =>
-  status.value === "success" ? (data.value?.next ?? null) : null,
-);
-
-// 圖片是否已經下載完成（成功或失敗皆算「已解決」，避免使用者被一張壞圖卡住、按了跳不過去）。
-// 用實際渲染出來的 <img> 呼叫原生 decode()，不用另外接 @load/@error，也不用額外套件。
-const imgEl = ref<HTMLImageElement | null>(null);
-const imageSettled = ref(true);
-
-watch(
-  imageUrl,
-  async (url) => {
-    if (!url) {
-      imageSettled.value = true;
-      return;
-    }
-    imageSettled.value = false;
-
-    // <img> 的 :src 是綁著這個 computed 值，要等 DOM 真的更新完才能拿到對應的 element
-    await nextTick();
-    const el = imgEl.value;
-    if (!el) {
-      // 拿不到 element 就不要卡住使用者
-      imageSettled.value = true;
-      return;
-    }
-
-    try {
-      await el.decode();
-    } catch {
-      // 下載失敗或圖片本身損毀，也視為「已解決」
-    } finally {
-      // 如果這段 await 期間 imageUrl 又換成別的值了（使用者連續切換），
-      // 這次 decode() 的結果就跟目前畫面對不上了，不要回頭誤設 imageSettled
-      if (imageUrl.value === url) {
-        imageSettled.value = true;
-      }
-    }
-  },
-  { immediate: true },
-);
-
-// 兩個條件都滿足才能再按下一頁：新照片自己的 prev/next 已經確定（query success），
-// 而且目前顯示的這張圖片已經下載完成
-const isNavigating = computed(() => !imageSettled.value);
+// 按鈕就會因為 template 上的 :disabled="!prev" / "!next" 自動擋住。畫面上一顯示出縮圖（success 當下）
+// 就能馬上再按下一頁，不需要等原圖 preload 完成。
+const prev = computed<string | null>(() => (status.value === "success" ? (data.value?.prev ?? null) : null));
+const next = computed<string | null>(() => (status.value === "success" ? (data.value?.next ?? null) : null));
 
 function goBack() {
   router.back();
@@ -240,13 +214,9 @@ function goNext() {
   navigateTo(next.value);
 }
 
-function navigateTo(target: PhotoNeighbor | null) {
-  if (!target || isNavigating.value) return;
-
-  optimisticImageUrl.value = target.imageUrl;
-  optimisticNotFound.value = !target.imageUrl;
-
-  router.replace({ name: "photo-detail", params: { id: target.imageId } });
+function navigateTo(targetId: string | null) {
+  if (!targetId) return;
+  router.replace({ name: "photo-detail", params: { id: targetId } });
 }
 </script>
 
@@ -327,6 +297,14 @@ function navigateTo(target: PhotoNeighbor | null) {
   max-width: 100%;
   max-height: calc(100dvh - var(--header-padding-top) - var(--header-padding-bottom) - 40px);
   object-fit: contain;
+}
+
+.photo-detail-skeleton {
+  width: 100%;
+  height: calc(100dvh - var(--header-padding-top) - var(--header-padding-bottom) - 40px);
+  background: linear-gradient(100deg, var(--bg-elevated) 40%, var(--bg-elevated-2) 50%, var(--bg-elevated) 60%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
 }
 
 .nav-button {

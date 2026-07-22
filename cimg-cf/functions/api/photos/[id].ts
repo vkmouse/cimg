@@ -1,7 +1,7 @@
 import type { AuthContext, Env } from '../../types'
 import * as photoService from '../../services/photoService'
 import * as bucketService from '../../services/bucketService'
-import { MIDDLE_SUFFIX } from '../../services/imageService'
+import { EXTRA_LARGE_SUFFIX, MIDDLE_SUFFIX } from '../../services/imageService'
 import type { PhotoListDto } from '../../services/photoService'
 import type { BucketDto } from '../../services/bucketService'
 import * as photoRepository from '../../repositories/photoRepository'
@@ -9,43 +9,37 @@ import type { PhotoListRow } from '../../repositories/photoRepository'
 
 /**
  * 組出 `/api/img` 可直接使用的相對網址。
- * 跟 `photos.ts` 裡的 `buildImageUrl` 邏輯一致，這裡改用跟列表頁一樣的 middle 尺寸
- * （detail 頁暫時先顯示 middle，不用 extraLarge）。
+ * 跟 `photos.ts` 裡的 `buildImageUrl` 邏輯一致，差別是這裡同一張照片要組兩種尺寸：
+ * `imageUrl`（extraLarge，原圖畫質）跟 `thumbnailUrl`（middle，跟列表縮圖同一份，先秒開再背景升級用）。
  */
-function buildImageUrl(photo: PhotoListDto, bucket: BucketDto): string {
+function buildUrl(photo: PhotoListDto, bucket: string, keybase: string, region: string, suffix: string): string {
   const params = new URLSearchParams({
     imageId: photo.imageId,
     sourceDevice: photo.sourceDevice,
     datePath: photo.datePath,
-    bucket: bucket.middleBucket,
-    keybase: bucket.middleKeybase,
-    region: bucket.region,
-    suffix: MIDDLE_SUFFIX,
+    bucket,
+    keybase,
+    region,
+    suffix,
   })
   return `/api/img?${params.toString()}`
 }
 
+function buildImageUrl(photo: PhotoListDto, bucket: BucketDto): string {
+  return buildUrl(photo, bucket.extraLargeBucket, bucket.extraLargeKeybase, bucket.region, EXTRA_LARGE_SUFFIX)
+}
+
+function buildThumbnailUrl(photo: PhotoListDto, bucket: BucketDto): string {
+  return buildUrl(photo, bucket.middleBucket, bucket.middleKeybase, bucket.region, MIDDLE_SUFFIX)
+}
+
 /**
- * 把鄰居的 PhotoListRow 組成回應要的 { imageId, imageUrl } 形狀。
- * row 為 null（已在時間軸邊界）→ 整體回 null；沒有 bucket → imageUrl 回 null（跟 current 邏輯一致）。
+ * 鄰居（上一張／下一張）現在只需要 imageId：前端靠這個 id 換頁時打 `/api/photos/:id`
+ * 取得那張照片自己的 imageUrl/thumbnailUrl，不在這裡預先組網址，也就不需要 bucket 參數。
+ * row 為 null（已在時間軸邊界）就回傳 null。
  */
-function buildNeighborPayload(
-  row: PhotoListRow | null,
-  bucket: BucketDto | null,
-): { imageId: string; imageUrl: string | null } | null {
-  if (!row) {
-    return null
-  }
-  const dto: PhotoListDto = {
-    imageId: row.image_id,
-    sourceDevice: row.source_device,
-    datePath: row.date_path,
-    shootingDate: row.shooting_date,
-  }
-  return {
-    imageId: dto.imageId,
-    imageUrl: bucket ? buildImageUrl(dto, bucket) : null,
-  }
+function buildNeighborPayload(row: PhotoListRow | null): string | null {
+  return row ? row.image_id : null
 }
 
 export const onRequest: PagesFunction<Env, 'id', AuthContext> = async (context) => {
@@ -76,8 +70,9 @@ export const onRequest: PagesFunction<Env, 'id', AuthContext> = async (context) 
       datePath: photo.datePath,
       shootingDate: photo.shootingDate,
       imageUrl: bucket ? buildImageUrl(photo, bucket) : null,
-      prev: buildNeighborPayload(newerRow, bucket),
-      next: buildNeighborPayload(olderRow, bucket),
+      thumbnailUrl: bucket ? buildThumbnailUrl(photo, bucket) : null,
+      prev: buildNeighborPayload(newerRow),
+      next: buildNeighborPayload(olderRow),
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)

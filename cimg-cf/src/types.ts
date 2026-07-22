@@ -37,17 +37,12 @@ export interface PhotoDateFilter {
 /** 清單排序方向：`desc` = shooting_date 新到舊（預設，不會出現在網址上），`asc` = 舊到新。 */
 export type PhotoSortOrder = 'asc' | 'desc'
 
-/** detail 頁左右鄰居（上一張／下一張）的精簡資料，找不到（已在時間軸邊界）時為 null。 */
-export interface PhotoNeighbor {
-  imageId: string
-  imageUrl: string | null
-}
-
 /**
  * GET /api/photos/:id 的回應形狀。
- * `imageUrl` 是用 middle bucket 組出來的（跟列表縮圖同一個尺寸，先暫時這樣，之後可能再調整），
- * 使用者尚未設定 bucket 時可能為 null。
- * `prev` = 時間上更新的那張（往右滑看到）；`next` = 時間上更舊的那張（往左滑看到）。
+ * `imageUrl` 是原圖畫質（extraLarge）；`thumbnailUrl` 跟列表縮圖同一份（middle），
+ * 用來讓 detail 頁先秒開，`imageUrl` 之後再背景升級替換。兩者在使用者尚未設定 bucket 時皆可能為 null。
+ * `prev`/`next` 只給 imageId（時間上更新/更舊的那張，往右/左滑看到），找不到（已在時間軸邊界）時為 null；
+ * 換頁時前端會用這個 id 另外打 `/api/photos/:id` 拿那張自己的 imageUrl/thumbnailUrl。
  */
 export interface PhotoDetailResponse {
   imageId: string
@@ -55,8 +50,9 @@ export interface PhotoDetailResponse {
   datePath: string
   shootingDate: number
   imageUrl: string | null
-  prev: PhotoNeighbor | null
-  next: PhotoNeighbor | null
+  thumbnailUrl: string | null
+  prev: string | null
+  next: string | null
 }
 
 /* -------------------------------------------------------------------------- */

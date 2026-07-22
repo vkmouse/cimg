@@ -49,7 +49,7 @@ export async function fetchPhotoItems(
 }
 
 /**
- * 取得單張照片的詳細資料（含 middle 尺寸的 imageUrl；先暫時用 middle，之後可能再調整）。
+ * 取得單張照片的詳細資料（含 imageUrl 原圖 + thumbnailUrl 縮圖兩種尺寸）。
  * 查無此照片（不存在 / 不屬於自己）時 API 回 404，這裡回傳 null 讓呼叫端視為「找不到這張照片」。
  * 其他非 2xx（網路壞掉、伺服器錯誤）則拋出例外，呼叫端視為「錯誤狀態」。
  */
