@@ -1,7 +1,7 @@
 import { computed, type Ref } from "vue";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { fetchMe, fetchPhotoItems } from "../services/api";
-import type { PhotoCursor, PhotoDateFilter, PhotoListResponse } from "../types";
+import type { PhotoCursor, PhotoDateFilter, PhotoListResponse, PhotoSortOrder } from "../types";
 
 /** 列表頁一格縮圖需要的最小資料：imageId 用來點擊導頁到 detail 頁，imageUrl 是縮圖網址。 */
 export interface PhotoThumbnail {
@@ -24,10 +24,14 @@ function thumbnailsOf(items: { imageId: string; imageUrl: string | null }[]): Ph
  * `imageUrl`（`/api/img?...`），前端不需要再另外呼叫 `/api/config`
  * 或自己用 AWS SDK 組 presigned URL。
  *
- * `filter` 是外部傳入的日期區間篩選條件（響應式）；放進 `queryKey` 後，
- * 篩選條件一變，vue-query 會視為全新的查詢，自動捨棄舊分頁、從第一頁重新抓取。
+ * `filter` 是外部傳入的日期區間篩選條件（響應式），`sort` 是外部傳入的排序方向（響應式，預設 `'desc'`）；
+ * 兩者放進 `queryKey` 後，篩選條件或排序一變，vue-query 會視為全新的查詢，自動捨棄舊分頁、從第一頁重新抓取
+ * （排序方向改變時，舊的 keyset cursor 也無法沿用，所以本來就必須重新從第一頁抓）。
  */
-export function usePhotoLibrary(filter?: Ref<PhotoDateFilter | null>) {
+export function usePhotoLibrary(
+  filter?: Ref<PhotoDateFilter | null>,
+  sort?: Ref<PhotoSortOrder>,
+) {
   const queryClient = useQueryClient();
 
   // 先確認使用者身份（回傳值本身不需要用到，只是要讓使用者資訊還沒確認好之前，
@@ -40,9 +44,13 @@ export function usePhotoLibrary(filter?: Ref<PhotoDateFilter | null>) {
   });
 
   const photosQuery = useInfiniteQuery({
-    queryKey: ["photos", filter ?? null],
+    queryKey: ["photos", filter ?? null, sort ?? null],
     queryFn: ({ pageParam }) =>
-      fetchPhotoItems(pageParam as PhotoCursor | undefined, filter?.value ?? null),
+      fetchPhotoItems(
+        pageParam as PhotoCursor | undefined,
+        filter?.value ?? null,
+        sort?.value ?? "desc",
+      ),
     initialPageParam: undefined as PhotoCursor | undefined,
     getNextPageParam: (lastPage: PhotoListResponse) =>
       lastPage.hasMore ? (lastPage.nextCursor ?? undefined) : undefined,

@@ -1,4 +1,10 @@
-import type { PhotoCursor, PhotoDateFilter, PhotoDetailResponse, PhotoListResponse } from "../types";
+import type {
+  PhotoCursor,
+  PhotoDateFilter,
+  PhotoDetailResponse,
+  PhotoListResponse,
+  PhotoSortOrder,
+} from "../types";
 
 /**
  * 取得目前使用者的 ID（回傳第一筆 users 的 id）
@@ -13,12 +19,14 @@ export async function fetchMe(): Promise<{ userId: string }> {
 
 /**
  * 取得一頁照片清單（僅含 metadata，不含實際圖片網址）。
- * 依 shootingDate 新到舊排序，用 keyset cursor 分頁，不帶 cursor 代表撈第一頁。
+ * 依 shootingDate 排序（`sort` 決定方向，預設新到舊），用 keyset cursor 分頁，不帶 cursor 代表撈第一頁。
  * `filter` 帶入時只回傳 shootingDate 落在區間內（含端點）的照片。
+ * `sort` 為 `'asc'` 時才會帶上 query 參數；預設的 `'desc'` 不帶參數（維持網址簡潔，也跟後端預設值一致）。
  */
 export async function fetchPhotoItems(
   cursor?: PhotoCursor,
   filter?: PhotoDateFilter | null,
+  sort?: PhotoSortOrder,
 ): Promise<PhotoListResponse> {
   const params = new URLSearchParams();
   if (cursor) {
@@ -28,6 +36,9 @@ export async function fetchPhotoItems(
   if (filter) {
     params.set("startDate", String(filter.startDate));
     params.set("endDate", String(filter.endDate));
+  }
+  if (sort === "asc") {
+    params.set("sort", "asc");
   }
   const query = params.toString();
   const res = await fetch(`/api/photos${query ? `?${query}` : ""}`);

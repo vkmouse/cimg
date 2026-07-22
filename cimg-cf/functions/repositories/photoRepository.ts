@@ -42,6 +42,9 @@ export interface PhotoDateRange {
   endDate: number
 }
 
+/** 清單排序方向：`desc` = shooting_date 新到舊（預設），`asc` = 舊到新。 */
+export type PhotoSortOrder = 'asc' | 'desc'
+
 /**
  * read 路徑（清單頁、詳情頁、詳情頁左右鄰居）共用的精簡欄位。
  * 只包含「顯示一張照片卡片 + 排序」所需的最小欄位組合：
@@ -75,22 +78,33 @@ export interface PhotoListRow {
  * 這個條件需要同時加在下方 UNION ALL 的兩段子查詢裡，理由跟上方註解一致：
  * 兩段各自仍要能被索引直接 seek，不能只加在外層合併後的查詢上（那樣等於先掃全部再過濾）。
  */
+/**
+ * `sortOrder` 決定排序方向與 keyset 分頁的比較方向：
+ * - `desc`（預設，新到舊）：ORDER BY ... DESC，往下一頁找「比 cursor 更舊」的資料（`<`）。
+ * - `asc`（舊到新）：ORDER BY ... ASC，往下一頁找「比 cursor 更新」的資料（`>`）。
+ * 兩種方向都各自維持「兩段各自能被索引 seek 的 UNION ALL」寫法，理由同上方註解。
+ * `sortOrder` 只會是 'asc' | 'desc' 這兩個內部型別值，直接字串內插進 SQL 關鍵字（不是使用者輸入）不會有注入風險。
+ */
 export async function getListByUserId(
   db: D1Database,
   userId: string,
   cursor: PhotoCursor | null,
   limit: number,
   dateRange: PhotoDateRange | null = null,
+  sortOrder: PhotoSortOrder = 'desc',
 ): Promise<PhotoListRow[]> {
   const dateClause = dateRange ? 'AND shooting_date BETWEEN ? AND ?' : ''
   const dateBinds = dateRange ? [dateRange.startDate, dateRange.endDate] : []
+
+  const orderKeyword = sortOrder === 'asc' ? 'ASC' : 'DESC'
+  const cursorOp = sortOrder === 'asc' ? '>' : '<'
 
   if (!cursor) {
     const rows = await db
       .prepare(
         `SELECT image_id, source_device, date_path, shooting_date FROM photos
          WHERE user_id = ? AND is_deleted = 0 ${dateClause}
-         ORDER BY shooting_date DESC, image_id DESC
+         ORDER BY shooting_date ${orderKeyword}, image_id ${orderKeyword}
          LIMIT ?`,
       )
       .bind(userId, ...dateBinds, limit)
@@ -103,19 +117,19 @@ export async function getListByUserId(
       `SELECT image_id, source_device, date_path, shooting_date FROM (
          SELECT image_id, source_device, date_path, shooting_date FROM (
            SELECT image_id, source_device, date_path, shooting_date FROM photos
-           WHERE user_id = ? AND is_deleted = 0 AND shooting_date < ? ${dateClause}
-           ORDER BY shooting_date DESC, image_id DESC
+           WHERE user_id = ? AND is_deleted = 0 AND shooting_date ${cursorOp} ? ${dateClause}
+           ORDER BY shooting_date ${orderKeyword}, image_id ${orderKeyword}
            LIMIT ?
          )
          UNION ALL
          SELECT image_id, source_device, date_path, shooting_date FROM (
            SELECT image_id, source_device, date_path, shooting_date FROM photos
-           WHERE user_id = ? AND is_deleted = 0 AND shooting_date = ? AND image_id < ? ${dateClause}
-           ORDER BY image_id DESC
+           WHERE user_id = ? AND is_deleted = 0 AND shooting_date = ? AND image_id ${cursorOp} ? ${dateClause}
+           ORDER BY image_id ${orderKeyword}
            LIMIT ?
          )
        )
-       ORDER BY shooting_date DESC, image_id DESC
+       ORDER BY shooting_date ${orderKeyword}, image_id ${orderKeyword}
        LIMIT ?`,
     )
     .bind(

@@ -1,6 +1,12 @@
 import type { PutEntityParams } from '../types'
 import * as photoRepository from '../repositories/photoRepository'
-import type { PhotoCursor, PhotoDateRange, PhotoListRow, PhotoRow } from '../repositories/photoRepository'
+import type {
+  PhotoCursor,
+  PhotoDateRange,
+  PhotoListRow,
+  PhotoRow,
+  PhotoSortOrder,
+} from '../repositories/photoRepository'
 import type { SyncableColumn } from '../repositories/syncableTable'
 import * as syncEventService from './syncEventService'
 import {
@@ -182,7 +188,8 @@ export interface PhotoListResult {
 }
 
 /**
- * 依 shooting_date DESC, image_id DESC 排序，用 keyset (cursor) 分頁撈取一頁照片。
+ * 依 shooting_date（依 `sortOrder` 決定新到舊或舊到新）+ image_id 排序，
+ * 用 keyset (cursor) 分頁撈取一頁照片。
  * 內部多撈 1 筆來判斷是否還有下一頁；回傳時會把多撈的那筆砍掉。
  */
 export async function getListByUserId(
@@ -191,8 +198,9 @@ export async function getListByUserId(
   cursor: PhotoCursor | null,
   limit: number = DEFAULT_PAGE_SIZE,
   dateRange: PhotoDateRange | null = null,
+  sortOrder: PhotoSortOrder = 'desc',
 ): Promise<PhotoListResult> {
-  const rows = await photoRepository.getListByUserId(db, userId, cursor, limit + 1, dateRange)
+  const rows = await photoRepository.getListByUserId(db, userId, cursor, limit + 1, dateRange, sortOrder)
 
   const hasMore = rows.length > limit
   const pageRows = hasMore ? rows.slice(0, limit) : rows

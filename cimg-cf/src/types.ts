@@ -34,6 +34,9 @@ export interface PhotoDateFilter {
   endDate: number
 }
 
+/** 清單排序方向：`desc` = shooting_date 新到舊（預設，不會出現在網址上），`asc` = 舊到新。 */
+export type PhotoSortOrder = 'asc' | 'desc'
+
 /** detail 頁左右鄰居（上一張／下一張）的精簡資料，找不到（已在時間軸邊界）時為 null。 */
 export interface PhotoNeighbor {
   imageId: string

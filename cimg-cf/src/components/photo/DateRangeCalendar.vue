@@ -62,7 +62,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { toDateKey, type DateKey } from "../../utils/dateRange";
+import { parseDateKey, toDateKey, type DateKey } from "../../utils/dateRange";
 
 /**
  * 開始/結束日期用 `v-model:start` 與 `v-model:end` 雙向綁定（皆為 `YYYY-MM-DD` 或 null）。
@@ -78,8 +78,11 @@ const weekdayLabels = ["日", "一", "二", "三", "四", "五", "六"];
 const today = new Date();
 const todayKey = toDateKey(today);
 
-// 目前檢視的月份（每月固定用該月第 1 天代表）
-const viewMonth = ref(new Date(today.getFullYear(), today.getMonth(), 1));
+// 目前檢視的月份（每月固定用該月第 1 天代表）。
+// 掛載時若已經有帶入 start（代表這次開啟 Modal 時已經套用過篩選），
+// 預設顯示「篩選開始日期」所在的月份；否則（尚未篩選過）才顯示當月。
+const initialViewDate = start.value ? parseDateKey(start.value) : today;
+const viewMonth = ref(new Date(initialViewDate.getFullYear(), initialViewDate.getMonth(), 1));
 
 const viewLabel = computed(() => `${viewMonth.value.getFullYear()} 年 ${viewMonth.value.getMonth() + 1} 月`);
 

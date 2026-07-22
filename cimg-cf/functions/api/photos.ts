@@ -4,7 +4,7 @@ import * as bucketService from '../services/bucketService'
 import { MIDDLE_SUFFIX } from '../services/imageService'
 import type { PhotoListDto } from '../services/photoService'
 import type { BucketDto } from '../services/bucketService'
-import type { PhotoCursor, PhotoDateRange } from '../repositories/photoRepository'
+import type { PhotoCursor, PhotoDateRange, PhotoSortOrder } from '../repositories/photoRepository'
 
 /**
  * 解析 ?cursorDate=&cursorId= query 參數。
@@ -48,6 +48,14 @@ function parseDateRange(url: URL): PhotoDateRange | null {
 }
 
 /**
+ * 解析 ?sort= query 參數。
+ * 只有明確帶 `sort=asc` 才視為「舊到新」，其他情況（沒帶 / 帶了不合法的值）一律視為預設的 `desc`（新到舊）。
+ */
+function parseSortOrder(url: URL): PhotoSortOrder {
+  return url.searchParams.get('sort') === 'asc' ? 'asc' : 'desc'
+}
+
+/**
  * 組出 `/api/img` 可直接使用的相對網址。
  * bucket/keybase/region 皆來自這個使用者自己的 `buckets` 表設定，
  * 跟每一筆照片本身無關，因此在呼叫端只查一次、每筆照片共用。
@@ -73,9 +81,10 @@ export const onRequest: PagesFunction<Env, any, AuthContext> = async (context) =
     const url = new URL(context.request.url)
     const cursor = parseCursor(url)
     const dateRange = parseDateRange(url)
+    const sortOrder = parseSortOrder(url)
 
     const [{ items, nextCursor, hasMore }, bucket] = await Promise.all([
-      photoService.getListByUserId(DB, userId, cursor, photoService.DEFAULT_PAGE_SIZE, dateRange),
+      photoService.getListByUserId(DB, userId, cursor, photoService.DEFAULT_PAGE_SIZE, dateRange, sortOrder),
       bucketService.getByUserId(DB, userId),
     ])
 
