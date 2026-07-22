@@ -7,6 +7,7 @@
       class="burst-card"
       @click="$emit('select', item.startDate, item.endDate)"
     >
+      <span class="burst-card__year">{{ formatYear(item.startDate) }}</span>
       <span class="burst-card__range">{{ formatRange(item.startDate, item.endDate) }}</span>
       <span class="burst-card__count">{{ item.totalCount }} 張</span>
     </button>
@@ -24,13 +25,18 @@ defineEmits<{
   select: [startDate: number, endDate: number];
 }>();
 
-/** 顯示用的日期區間格式，例如「3/12 – 3/18」（本地時區，僅月/日）。 */
+/** 年份（以 startDate 為準；burst 區間短，理論上不會跨年）。 */
+function formatYear(startUnix: number): string {
+  return String(new Date(startUnix * 1000).getFullYear());
+}
+
+/** 顯示用的日期區間格式，例如「4/26 ~ 4/28」（本地時區，僅月/日）。 */
 function formatRange(startUnix: number, endUnix: number): string {
   const fmt = (unix: number) => {
     const d = new Date(unix * 1000);
     return `${d.getMonth() + 1}/${d.getDate()}`;
   };
-  return `${fmt(startUnix)} – ${fmt(endUnix)}`;
+  return `${fmt(startUnix)} ~ ${fmt(endUnix)}`;
 }
 </script>
 
@@ -63,6 +69,11 @@ function formatRange(startUnix: number, endUnix: number): string {
 
 .burst-card:active {
   background-color: var(--bg-elevated-2);
+}
+
+.burst-card__year {
+  font-size: var(--font-caption);
+  color: var(--label-secondary);
 }
 
 .burst-card__range {
