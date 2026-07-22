@@ -1,7 +1,7 @@
 import type { EntityType, PushCommand } from '../types'
 import { isFiniteNumber, isNonEmptyString } from '../utils/validation'
 
-const ENTITY_TYPES: EntityType[] = ['BKT', 'USR', 'PHT', 'CRD']
+const ENTITY_TYPES: EntityType[] = ['BKT', 'USR', 'PHT', 'CRD', 'PBT']
 
 export class CommandValidationError extends Error {}
 
@@ -16,7 +16,7 @@ export function validateCommand(command: unknown): PushCommand {
     throw new CommandValidationError('mutationId 必須是非空字串')
   }
   if (typeof c.entityType !== 'string' || !ENTITY_TYPES.includes(c.entityType as EntityType)) {
-    throw new CommandValidationError('entityType 必須是 BKT｜USR｜PHT｜CRD 其中之一')
+    throw new CommandValidationError('entityType 必須是 BKT｜USR｜PHT｜CRD｜PBT 其中之一')
   }
   if (!isNonEmptyString(c.entityId)) {
     throw new CommandValidationError('entityId 必須是非空字串')
