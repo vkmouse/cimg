@@ -45,7 +45,7 @@ export interface PhotoNeighbor {
 
 /**
  * GET /api/photos/:id 的回應形狀。
- * `imageUrl` 是用 extraLarge bucket 組出來的（畫質比列表縮圖好），
+ * `imageUrl` 是用 middle bucket 組出來的（跟列表縮圖同一個尺寸，先暫時這樣，之後可能再調整），
  * 使用者尚未設定 bucket 時可能為 null。
  * `prev` = 時間上更新的那張（往右滑看到）；`next` = 時間上更舊的那張（往左滑看到）。
  */

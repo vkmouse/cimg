@@ -1,7 +1,7 @@
 import type { AuthContext, Env } from '../../types'
 import * as photoService from '../../services/photoService'
 import * as bucketService from '../../services/bucketService'
-import { EXTRA_LARGE_SUFFIX } from '../../services/imageService'
+import { MIDDLE_SUFFIX } from '../../services/imageService'
 import type { PhotoListDto } from '../../services/photoService'
 import type { BucketDto } from '../../services/bucketService'
 import * as photoRepository from '../../repositories/photoRepository'
@@ -9,18 +9,18 @@ import type { PhotoListRow } from '../../repositories/photoRepository'
 
 /**
  * 組出 `/api/img` 可直接使用的相對網址。
- * 跟 `photos.ts` 裡的 `buildImageUrl` 邏輯一致，差別只在這裡固定用
- * extraLarge 尺寸（detail 頁要看比列表縮圖更清楚的畫質），而不是 middle。
+ * 跟 `photos.ts` 裡的 `buildImageUrl` 邏輯一致，這裡改用跟列表頁一樣的 middle 尺寸
+ * （detail 頁暫時先顯示 middle，不用 extraLarge）。
  */
 function buildImageUrl(photo: PhotoListDto, bucket: BucketDto): string {
   const params = new URLSearchParams({
     imageId: photo.imageId,
     sourceDevice: photo.sourceDevice,
     datePath: photo.datePath,
-    bucket: bucket.extraLargeBucket,
-    keybase: bucket.extraLargeKeybase,
+    bucket: bucket.middleBucket,
+    keybase: bucket.middleKeybase,
     region: bucket.region,
-    suffix: EXTRA_LARGE_SUFFIX,
+    suffix: MIDDLE_SUFFIX,
   })
   return `/api/img?${params.toString()}`
 }
