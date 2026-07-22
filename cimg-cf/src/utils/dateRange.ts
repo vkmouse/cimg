@@ -15,6 +15,11 @@ export function toDateKey(d: Date): DateKey {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
+/** 將 unix seconds（本地時區）轉成 `YYYY-MM-DD` 字串，`dateKeysToFilter` 的反方向轉換。 */
+export function unixToDateKey(unixSeconds: number): DateKey {
+  return toDateKey(new Date(unixSeconds * 1000));
+}
+
 const DATE_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 /** 驗證字串是否為合法的 `YYYY-MM-DD`（且真的是存在的日期，例如排除 2026-02-30）。 */

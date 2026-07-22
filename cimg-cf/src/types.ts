@@ -38,6 +38,21 @@ export interface PhotoDateFilter {
 export type PhotoSortOrder = 'asc' | 'desc'
 
 /**
+ * `BurstCarousel` 一張卡片需要的最小資料：日期區間（unix seconds，含端點）+ 張數。
+ * 不含 `spanDays`（目前 UI 用不到）。
+ */
+export interface PhotoBurstItem {
+  startDate: number
+  endDate: number
+  totalCount: number
+}
+
+/** GET /api/photo-bursts 的回應形狀。依 startDate 新到舊排序，不分頁。 */
+export interface PhotoBurstListResponse {
+  items: PhotoBurstItem[]
+}
+
+/**
  * GET /api/photos/:id 的回應形狀。
  * `imageUrl` 是原圖畫質（extraLarge）；`thumbnailUrl` 跟列表縮圖同一份（middle），
  * 用來讓 detail 頁先秒開，`imageUrl` 之後再背景升級替換。兩者在使用者尚未設定 bucket 時皆可能為 null。

@@ -41,6 +41,8 @@
       </div>
     </header>
 
+    <BurstCarousel :items="bursts" @select="onSelectBurst" />
+
     <div class="library-content">
       <!-- 首次載入：整頁骨架網格 -->
       <PhotoSkeleton v-if="loading && photos.length === 0" />
@@ -84,11 +86,13 @@
 import { computed, onMounted, onBeforeUnmount, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { usePhotoLibrary } from "../composables/usePhotoLibrary";
+import { usePhotoBursts } from "../composables/usePhotoBursts";
 import PhotoGrid from "../components/photo/PhotoGrid.vue";
 import PhotoSkeleton from "../components/photo/PhotoSkeleton.vue";
 import PhotoEmptyState from "../components/photo/PhotoEmptyState.vue";
 import FilterModal from "../components/photo/FilterModal.vue";
-import { dateKeysToFilter, isValidDateKey, type DateKey } from "../utils/dateRange";
+import BurstCarousel from "../components/photo/BurstCarousel.vue";
+import { dateKeysToFilter, isValidDateKey, unixToDateKey, type DateKey } from "../utils/dateRange";
 import type { PhotoDateFilter, PhotoSortOrder } from "../types";
 
 const route = useRoute();
@@ -123,6 +127,13 @@ function applyFilter(start: DateKey, end: DateKey) {
   appliedStart.value = start;
   appliedEnd.value = end;
   router.replace({ query: { ...route.query, start, end } });
+}
+
+const { bursts } = usePhotoBursts();
+
+/** 點擊 burst 卡片：把 unix seconds 轉成 DateKey，直接套用既有的 applyFilter 流程。 */
+function onSelectBurst(startDate: number, endDate: number) {
+  applyFilter(unixToDateKey(startDate), unixToDateKey(endDate));
 }
 
 function clearFilter() {

@@ -1,4 +1,5 @@
 import type {
+  PhotoBurstListResponse,
   PhotoCursor,
   PhotoDateFilter,
   PhotoDetailResponse,
@@ -76,6 +77,17 @@ export async function fetchPhotoDetail(
   }
   if (!res.ok) {
     throw new Error(`無法取得照片（${res.status}）`);
+  }
+  return res.json();
+}
+
+/**
+ * 取得目前使用者所有 photo burst（密集拍照期間），依 startDate 新到舊排序，不分頁。
+ */
+export async function fetchPhotoBursts(): Promise<PhotoBurstListResponse> {
+  const res = await fetch("/api/photo-bursts");
+  if (!res.ok) {
+    throw new Error(`無法取得 photo burst 清單（${res.status}）`);
   }
   return res.json();
 }

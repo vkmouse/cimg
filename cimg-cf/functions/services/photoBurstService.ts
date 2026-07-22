@@ -1,6 +1,6 @@
 import type { PutEntityParams } from '../types'
 import * as photoBurstRepository from '../repositories/photoBurstRepository'
-import type { PhotoBurstRow } from '../repositories/photoBurstRepository'
+import type { PhotoBurstListRow, PhotoBurstRow } from '../repositories/photoBurstRepository'
 import type { SyncableColumn } from '../repositories/syncableTable'
 import * as syncEventService from './syncEventService'
 import { isFiniteNumber, isNonEmptyString, parsePayloadJson, PayloadValidationError } from '../utils/validation'
@@ -25,6 +25,31 @@ function toDto(row: PhotoBurstRow): PhotoBurstDto {
     version: row.version,
     isDeleted: row.is_deleted === 1,
   }
+}
+
+/**
+ * read 路徑（`BurstCarousel` 用）共用的精簡 DTO，對應 `photoBurstRepository.PhotoBurstListRow`。
+ * 跟 `PhotoBurstDto`（write 路徑，`put()` 組 sync payload 用）區分開來，理由同 `photoService.ts`
+ * 裡 `PhotoListDto` vs `PhotoDto` 的分法。
+ */
+export interface PhotoBurstListDto {
+  startDate: number
+  endDate: number
+  totalCount: number
+}
+
+function toListDto(row: PhotoBurstListRow): PhotoBurstListDto {
+  return {
+    startDate: row.start_date,
+    endDate: row.end_date,
+    totalCount: row.total_count,
+  }
+}
+
+/** 依 startDate 新到舊排序，回傳目前使用者所有 burst（不分頁，資料量小）。 */
+export async function getListByUserId(db: D1Database, userId: string): Promise<PhotoBurstListDto[]> {
+  const rows = await photoBurstRepository.getListByUserId(db, userId)
+  return rows.map(toListDto)
 }
 
 /** payload 欄位為 snake_case（與 sync_queue.payload 一致）。 */
