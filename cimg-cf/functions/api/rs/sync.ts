@@ -12,8 +12,7 @@ import * as credentialService from '../../services/credentialService'
 import * as bucketService from '../../services/bucketService'
 import * as photoService from '../../services/photoService'
 import * as syncEventService from '../../services/syncEventService'
-
-const ENTITY_TYPES: EntityType[] = ['BKT', 'USR', 'PHT', 'CRD']
+import { validateCommand, extractMutationId } from '../../services/syncCommandService'
 
 /** entityType -> 對應的 Service.putXxx 方法（action 目前只有 PUT 一種，故不再需要 action 當 key 的一部分）。 */
 const handlerMap: Record<EntityType, PutEntityHandler> = {
@@ -21,52 +20,6 @@ const handlerMap: Record<EntityType, PutEntityHandler> = {
   CRD: credentialService.put,
   BKT: bucketService.put,
   PHT: photoService.put,
-}
-
-class CommandValidationError extends Error {}
-
-/** 驗證 PushCommand 本身的形狀（payload 內容的驗證留給對應的 Service）。 */
-function validateCommand(command: unknown): PushCommand {
-  if (typeof command !== 'object' || command === null) {
-    throw new CommandValidationError('command 必須是一個物件')
-  }
-  const c = command as Record<string, unknown>
-
-  if (typeof c.mutationId !== 'string' || c.mutationId.length === 0) {
-    throw new CommandValidationError('mutationId 必須是非空字串')
-  }
-  if (typeof c.entityType !== 'string' || !ENTITY_TYPES.includes(c.entityType as EntityType)) {
-    throw new CommandValidationError('entityType 必須是 BKT｜USR｜PHT｜CRD 其中之一')
-  }
-  if (typeof c.entityId !== 'string' || c.entityId.length === 0) {
-    throw new CommandValidationError('entityId 必須是非空字串')
-  }
-  if (typeof c.baseVersion !== 'number' || !Number.isInteger(c.baseVersion) || c.baseVersion < 0) {
-    throw new CommandValidationError('baseVersion 必須是 >= 0 的整數')
-  }
-  if (typeof c.payload !== 'string' || c.payload.length === 0) {
-    throw new CommandValidationError('payload 必須是非空字串')
-  }
-
-  return {
-    mutationId: c.mutationId,
-    entityType: c.entityType as EntityType,
-    entityId: c.entityId,
-    baseVersion: c.baseVersion,
-    payload: c.payload,
-  }
-}
-
-/** 即使驗證失敗，也盡量把 mutationId 從原始輸入裡撈出來，讓 pushResults 對得上。 */
-function extractMutationId(rawCommand: unknown): string {
-  if (
-    typeof rawCommand === 'object' &&
-    rawCommand !== null &&
-    typeof (rawCommand as Record<string, unknown>).mutationId === 'string'
-  ) {
-    return (rawCommand as Record<string, unknown>).mutationId as string
-  }
-  return 'unknown'
 }
 
 export const onRequest: PagesFunction<Env> = async (context) => {
