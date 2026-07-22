@@ -80,6 +80,22 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         ON photos (user_id, is_deleted, shooting_date DESC, image_id DESC)
       `),
       DB.prepare(`
+        CREATE TABLE IF NOT EXISTS photo_bursts (
+            id          TEXT PRIMARY KEY,
+            user_id     TEXT NOT NULL,
+            start_date  INTEGER NOT NULL,
+            end_date    INTEGER NOT NULL,
+            total_count INTEGER NOT NULL,
+            span_days   INTEGER NOT NULL,
+            version     INTEGER NOT NULL,
+            is_deleted  INTEGER NOT NULL
+        )
+      `),
+      DB.prepare(`
+        CREATE INDEX IF NOT EXISTS idx_photo_bursts_user
+        ON photo_bursts (user_id)
+      `),
+      DB.prepare(`
         CREATE TABLE IF NOT EXISTS sync_events (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id     TEXT NOT NULL,

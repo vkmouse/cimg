@@ -128,6 +128,7 @@ impl Database {
             "CRD" => credentials::restore_snapshot(&self.conn, entity_id, snapshot_json),
             "BKT" => buckets::restore_snapshot(&self.conn, entity_id, snapshot_json),
             "PHT" => photos::restore_snapshot(&self.conn, entity_id, snapshot_json),
+            "PBT" => photo_bursts::restore_snapshot(&self.conn, entity_id, snapshot_json),
             other => {
                 eprintln!(
                     "[db] restore_snapshot: 未知的 entity_type={other},跳過 entity_id={entity_id}"
@@ -147,6 +148,7 @@ impl Database {
             "CRD" => credentials::delete_local(&self.conn, entity_id),
             "BKT" => buckets::delete_local(&self.conn, entity_id),
             "PHT" => photos::delete_local(&self.conn, entity_id),
+            "PBT" => photo_bursts::delete_local(&self.conn, entity_id),
             other => {
                 eprintln!(
                     "[db] delete_local_entity: 未知的 entity_type={other},跳過 entity_id={entity_id}"
@@ -180,7 +182,7 @@ impl Database {
     /// - 各 entity 模組內部直接相信伺服器版本,無條件覆蓋本地資料,不比較
     ///   本地 version (本地未推送的編輯有機會被遠端覆蓋,這是已知且接受
     ///   的取捨)。
-    /// - `entity_type` 對應不到任何已知類型 (USR/CRD/BKT/PHT) 時,記錄
+    /// - `entity_type` 對應不到任何已知類型 (USR/CRD/BKT/PHT/PBT) 時,記錄
     ///   錯誤並跳過,不中斷整個 pull 流程。
     pub fn apply_pull_event(
         &self,
@@ -194,6 +196,7 @@ impl Database {
             "CRD" => credentials::apply_remote(&self.conn, entity_id, payload_json, version),
             "BKT" => buckets::apply_remote(&self.conn, entity_id, payload_json, version),
             "PHT" => photos::apply_remote(&self.conn, entity_id, payload_json, version),
+            "PBT" => photo_bursts::apply_remote(&self.conn, entity_id, payload_json, version),
             other => {
                 eprintln!(
                     "[db] apply_pull_event: 未知的 entity_type={other},跳過 entity_id={entity_id}"

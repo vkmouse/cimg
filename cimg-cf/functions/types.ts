@@ -57,7 +57,7 @@ export type PutEntityHandler = (db: D1Database, params: PutEntityParams) => Prom
 /* -------------------------------------------------------------------------- */
 
 /** 對應 sync_events.entity_type。 */
-export type EntityType = 'BKT' | 'USR' | 'PHT' | 'CRD'
+export type EntityType = 'BKT' | 'USR' | 'PHT' | 'CRD' | 'PBT'
 
 export interface PushCommand {
   mutationId: string

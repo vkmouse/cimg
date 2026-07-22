@@ -11,6 +11,7 @@ import * as userService from '../../services/userService'
 import * as credentialService from '../../services/credentialService'
 import * as bucketService from '../../services/bucketService'
 import * as photoService from '../../services/photoService'
+import * as photoBurstService from '../../services/photoBurstService'
 import * as syncEventService from '../../services/syncEventService'
 import { validateCommand, extractMutationId } from '../../services/syncCommandService'
 
@@ -20,6 +21,7 @@ const handlerMap: Record<EntityType, PutEntityHandler> = {
   CRD: credentialService.put,
   BKT: bucketService.put,
   PHT: photoService.put,
+  PBT: photoBurstService.put,
 }
 
 export const onRequest: PagesFunction<Env> = async (context) => {

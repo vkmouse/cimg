@@ -16,13 +16,14 @@
 use rusqlite::{params, Connection, Result, ToSql};
 use uuid::Uuid;
 
-/// entity 類型代碼,對應文件裡的 USR / CRD / BKT / PHT。
+/// entity 類型代碼,對應文件裡的 USR / CRD / BKT / PHT / PBT。
 #[derive(Debug, Clone, Copy)]
 pub enum EntityType {
     User,
     Credential,
     Bucket,
     Photo,
+    PhotoBurst,
 }
 
 impl EntityType {
@@ -32,6 +33,7 @@ impl EntityType {
             EntityType::Credential => "CRD",
             EntityType::Bucket => "BKT",
             EntityType::Photo => "PHT",
+            EntityType::PhotoBurst => "PBT",
         }
     }
 }
