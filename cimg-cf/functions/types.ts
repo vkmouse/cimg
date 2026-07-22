@@ -45,3 +45,56 @@ export interface PutEntityParams {
  * 回傳非 null 代表寫入成功（status OK，且 Service 內部已經寫好 sync_events）。
  */
 export type PutEntityHandler = (db: D1Database, params: PutEntityParams) => Promise<unknown | null>
+
+/* -------------------------------------------------------------------------- */
+/* Sync API (POST /api/rs/sync) 契約型別                                       */
+/*                                                                            */
+/* 前端 `src/types.ts` 裡也有一份形狀相同的定義：這兩份型別故意各自獨立維護、  */
+/* 不共用同一個檔案。後端不依賴前端的資料夾結構（反之亦然），兩邊各自是      */
+/* 自己這一份 API 契約的定義來源，改動任一邊的內部結構都不會連動打斷另一邊； */
+/* 對外的實際契約由 sync.ts 的 request/response 行為決定，型別只是各自對它  */
+/* 的描述。                                                                  */
+/* -------------------------------------------------------------------------- */
+
+/** 對應 sync_events.entity_type。 */
+export type EntityType = 'BKT' | 'USR' | 'PHT' | 'CRD'
+
+export interface PushCommand {
+  mutationId: string
+  entityType: EntityType
+  entityId: string
+  baseVersion: number
+  /** JSON 字串，內容為 snake_case 欄位（與 sync_queue.payload 格式一致）。 */
+  payload: string
+}
+
+export type PushResultStatus = 'OK' | 'ERROR' | 'SKIPPED'
+
+export interface PushResult {
+  mutationId: string
+  status: PushResultStatus
+}
+
+export interface SyncRequestBody {
+  pushCommands: PushCommand[]
+  /** client 上次同步記下的 sync_events.id 游標；用來計算這次 pull 的範圍（id > lastCursor）。 */
+  lastCursor: number
+}
+
+/** Pull 流程回傳的單一筆伺服器端新事件，欄位皆為 camelCase（payload 內容仍是 JSON 字串）。 */
+export interface PullEvent {
+  id: number
+  mutationId: string
+  entityType: EntityType
+  entityId: string
+  version: number
+  payload: string | null
+}
+
+export interface SyncResponseBody {
+  pushResults: PushResult[]
+  /** 目前 sync_events 表格的最大 id，client 收到後應存起來，下次同步當作 lastCursor 帶回來。 */
+  newCursor: number
+  /** lastCursor 之後、且排除本次請求自己 push 上來的 mutationId 的所有新事件。 */
+  pullEvents: PullEvent[]
+}

@@ -15,7 +15,7 @@ import {
   isStringOrNull,
   parsePayloadJson,
   PayloadValidationError,
-} from './validation'
+} from '../utils/validation'
 
 export interface PhotoDto {
   imageId: string

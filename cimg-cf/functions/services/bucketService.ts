@@ -3,7 +3,7 @@ import * as bucketRepository from '../repositories/bucketRepository'
 import type { BucketRow } from '../repositories/bucketRepository'
 import type { SyncableColumn } from '../repositories/syncableTable'
 import * as syncEventService from './syncEventService'
-import { isNonEmptyString, parsePayloadJson, PayloadValidationError } from './validation'
+import { isNonEmptyString, parsePayloadJson, PayloadValidationError } from '../utils/validation'
 
 export interface BucketDto {
   userId: string

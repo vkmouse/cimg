@@ -3,7 +3,7 @@ import * as userRepository from '../repositories/userRepository'
 import type { UserRow } from '../repositories/userRepository'
 import type { SyncableColumn } from '../repositories/syncableTable'
 import * as syncEventService from './syncEventService'
-import { isBoolean, isNonEmptyString, parsePayloadJson, PayloadValidationError } from './validation'
+import { isBoolean, isNonEmptyString, parsePayloadJson, PayloadValidationError } from '../utils/validation'
 
 export interface UserDto {
   id: string

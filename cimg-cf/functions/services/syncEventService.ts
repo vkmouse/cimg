@@ -1,4 +1,4 @@
-import type { EntityType, PullEvent } from '../../src/types'
+import type { EntityType, PullEvent } from '../types'
 import * as syncEventRepository from '../repositories/syncEventRepository'
 
 /**

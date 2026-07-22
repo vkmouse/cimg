@@ -9,7 +9,7 @@ import {
   isNonEmptyString,
   parsePayloadJson,
   PayloadValidationError,
-} from './validation'
+} from '../utils/validation'
 
 export interface CredentialDto {
   userId: string

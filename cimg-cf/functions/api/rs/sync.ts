@@ -1,11 +1,12 @@
-import type { Env, PutEntityHandler } from '../../types'
 import type {
+  Env,
+  PutEntityHandler,
   PushCommand,
   PushResult,
   EntityType,
   SyncRequestBody,
   SyncResponseBody,
-} from '../../../src/types'
+} from '../../types'
 import * as userService from '../../services/userService'
 import * as credentialService from '../../services/credentialService'
 import * as bucketService from '../../services/bucketService'
