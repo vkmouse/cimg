@@ -4,7 +4,7 @@ import * as bucketService from '../services/bucketService'
 import { MIDDLE_SUFFIX } from '../services/imageService'
 import type { PhotoListDto } from '../services/photoService'
 import type { BucketDto } from '../services/bucketService'
-import { parseCursor, parseDateRange, parseSortOrder } from './photoQueryParams'
+import { parseCursor, parseDateRange, parseSortOrder } from '../utils/photoQueryParams'
 
 /**
  * 組出 `/api/img` 可直接使用的相對網址。

@@ -6,7 +6,7 @@ import type { PhotoListDto } from '../../services/photoService'
 import type { BucketDto } from '../../services/bucketService'
 import * as photoRepository from '../../repositories/photoRepository'
 import type { PhotoListRow, PhotoSortOrder } from '../../repositories/photoRepository'
-import { parseDateRange, parseSortOrder } from '../photoQueryParams'
+import { parseDateRange, parseSortOrder } from '../../utils/photoQueryParams'
 
 /**
  * 組出 `/api/img` 可直接使用的相對網址。
