@@ -25,6 +25,15 @@ export interface PhotoListResponse {
   hasMore: boolean
 }
 
+/**
+ * 日期區間篩選條件，皆為 unix seconds（含端點）。
+ * `startDate` 為開始日期當天 00:00:00，`endDate` 為結束日期當天 23:59:59。
+ */
+export interface PhotoDateFilter {
+  startDate: number
+  endDate: number
+}
+
 /** detail 頁左右鄰居（上一張／下一張）的精簡資料，找不到（已在時間軸邊界）時為 null。 */
 export interface PhotoNeighbor {
   imageId: string

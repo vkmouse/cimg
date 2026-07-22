@@ -4,7 +4,7 @@ import * as bucketService from '../services/bucketService'
 import { MIDDLE_SUFFIX } from '../services/imageService'
 import type { PhotoListDto } from '../services/photoService'
 import type { BucketDto } from '../services/bucketService'
-import type { PhotoCursor } from '../repositories/photoRepository'
+import type { PhotoCursor, PhotoDateRange } from '../repositories/photoRepository'
 
 /**
  * 解析 ?cursorDate=&cursorId= query 參數。
@@ -24,6 +24,27 @@ function parseCursor(url: URL): PhotoCursor | null {
   }
 
   return { shootingDate, imageId: cursorId }
+}
+
+/**
+ * 解析 ?startDate=&endDate=（unix seconds）query 參數。
+ * 兩者需成對、皆為合法數字、且 startDate <= endDate 才視為有效篩選，否則視為不篩選（null）。
+ */
+function parseDateRange(url: URL): PhotoDateRange | null {
+  const startRaw = url.searchParams.get('startDate')
+  const endRaw = url.searchParams.get('endDate')
+
+  if (!startRaw || !endRaw) {
+    return null
+  }
+
+  const startDate = Number(startRaw)
+  const endDate = Number(endRaw)
+  if (!Number.isFinite(startDate) || !Number.isFinite(endDate) || startDate > endDate) {
+    return null
+  }
+
+  return { startDate, endDate }
 }
 
 /**
@@ -51,9 +72,10 @@ export const onRequest: PagesFunction<Env, any, AuthContext> = async (context) =
   try {
     const url = new URL(context.request.url)
     const cursor = parseCursor(url)
+    const dateRange = parseDateRange(url)
 
     const [{ items, nextCursor, hasMore }, bucket] = await Promise.all([
-      photoService.getListByUserId(DB, userId, cursor),
+      photoService.getListByUserId(DB, userId, cursor, photoService.DEFAULT_PAGE_SIZE, dateRange),
       bucketService.getByUserId(DB, userId),
     ])
 

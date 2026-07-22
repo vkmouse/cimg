@@ -1,6 +1,6 @@
 import type { PutEntityParams } from '../types'
 import * as photoRepository from '../repositories/photoRepository'
-import type { PhotoCursor, PhotoListRow, PhotoRow } from '../repositories/photoRepository'
+import type { PhotoCursor, PhotoDateRange, PhotoListRow, PhotoRow } from '../repositories/photoRepository'
 import type { SyncableColumn } from '../repositories/syncableTable'
 import * as syncEventService from './syncEventService'
 import {
@@ -190,8 +190,9 @@ export async function getListByUserId(
   userId: string,
   cursor: PhotoCursor | null,
   limit: number = DEFAULT_PAGE_SIZE,
+  dateRange: PhotoDateRange | null = null,
 ): Promise<PhotoListResult> {
-  const rows = await photoRepository.getListByUserId(db, userId, cursor, limit + 1)
+  const rows = await photoRepository.getListByUserId(db, userId, cursor, limit + 1, dateRange)
 
   const hasMore = rows.length > limit
   const pageRows = hasMore ? rows.slice(0, limit) : rows
