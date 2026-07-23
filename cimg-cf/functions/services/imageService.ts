@@ -127,7 +127,7 @@ export async function fetchImage(
   params: ImageParams,
 ): Promise<ImageResult> {
   const credential = await credentialService.getByUserId(db, userId)
-  if (!credential) {
+  if (!credential || credential.expiration <= Math.floor(Date.now() / 1000)) {
     return { ok: false, reason: 'no_credential' }
   }
 
