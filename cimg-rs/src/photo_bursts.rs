@@ -16,11 +16,11 @@ use crate::db::Database;
 use crate::error::AppResult;
 
 /// Gap tolerance:中間最多容忍幾天沒拍照,仍算同一段連續區間。
-const GAP_TOLERANCE_DAYS: i64 = 1;
+const GAP_TOLERANCE_DAYS: i64 = 0;
 
 /// 密度門檻倍數:cluster 的「平均每日張數」要達到基準線(全域中位數)的
 /// 幾倍,才判定為密集拍照區間。
-const DENSITY_RATIO: f64 = 2.5;
+const DENSITY_RATIO: f64 = 2.0;
 
 /// 使用者「有拍照的日期數」至少要達到這個數字,才有足夠統計意義計算
 /// 基準線;不足則整個跳過偵測(這個 user 這次的 computed 結果視為空,
