@@ -5,6 +5,7 @@
       :key="item.startDate"
       type="button"
       class="burst-card"
+      :class="{ 'burst-card--active': isActive(item) }"
       @click="$emit('select', item.startDate, item.endDate)"
     >
       <span class="burst-card__year">{{ formatYear(item.startDate) }}</span>
@@ -16,14 +17,24 @@
 
 <script setup lang="ts">
 import type { PhotoBurstItem } from "../../types";
+import { unixToDateKey, type DateKey } from "../../utils/dateRange";
 
-defineProps<{
+const props = defineProps<{
   items: PhotoBurstItem[];
+  /** 目前套用中的篩選區間（DateKey，與網址 query 同格式）；沒有篩選時為 null。 */
+  appliedStart?: DateKey | null;
+  appliedEnd?: DateKey | null;
 }>();
 
 defineEmits<{
   select: [startDate: number, endDate: number];
 }>();
+
+/** 判斷這張卡片代表的區間是否就是目前套用中的篩選區間，是的話要高亮。 */
+function isActive(item: PhotoBurstItem): boolean {
+  if (!props.appliedStart || !props.appliedEnd) return false;
+  return unixToDateKey(item.startDate) === props.appliedStart && unixToDateKey(item.endDate) === props.appliedEnd;
+}
 
 /** 年份（以 startDate 為準；burst 區間短，理論上不會跨年）。 */
 function formatYear(startUnix: number): string {
@@ -70,6 +81,21 @@ function formatRange(startUnix: number, endUnix: number): string {
 
 .burst-card:active {
   background-color: var(--bg-elevated-2);
+}
+
+.burst-card--active {
+  background-color: var(--accent);
+}
+
+.burst-card--active .burst-card__year,
+.burst-card--active .burst-card__range,
+.burst-card--active .burst-card__count {
+  color: #fff;
+}
+
+.burst-card--active:active {
+  background-color: var(--accent);
+  opacity: 0.85;
 }
 
 .burst-card__year {

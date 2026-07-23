@@ -41,7 +41,12 @@
       </div>
     </header>
 
-    <BurstCarousel :items="bursts" @select="onSelectBurst" />
+    <BurstCarousel
+      :items="bursts"
+      :applied-start="appliedStart"
+      :applied-end="appliedEnd"
+      @select="onSelectBurst"
+    />
 
     <div class="library-content">
       <!-- 首次載入：整頁骨架網格 -->
@@ -79,6 +84,20 @@
       @apply="applyFilter"
       @clear="clearFilter"
     />
+
+    <Transition name="scroll-top-fade">
+      <button
+        v-if="showScrollTop"
+        type="button"
+        class="scroll-top-btn"
+        aria-label="回到頂部"
+        @click="scrollToTop"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 19.5V4.5m0 0-6 6m6-6 6 6" />
+        </svg>
+      </button>
+    </Transition>
   </section>
 </template>
 
@@ -188,12 +207,26 @@ watch(sentinel, (el, prevEl) => {
   }
 });
 
+// 捲動超過一個畫面高度才顯示「回到頂部」按鈕，避免頁面本來就很短時按鈕一直出現。
+const SCROLL_TOP_THRESHOLD = 400;
+const showScrollTop = ref(false);
+
+function handleScroll() {
+  showScrollTop.value = window.scrollY > SCROLL_TOP_THRESHOLD;
+}
+
+function scrollToTop() {
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
 onMounted(() => {
   setupObserver();
+  window.addEventListener("scroll", handleScroll, { passive: true });
 });
 
 onBeforeUnmount(() => {
   observer?.disconnect();
+  window.removeEventListener("scroll", handleScroll);
 });
 </script>
 
@@ -272,5 +305,43 @@ onBeforeUnmount(() => {
 .load-more-hint {
   font-size: var(--font-caption, 13px);
   color: var(--label-secondary, #888);
+}
+
+.scroll-top-btn {
+  position: fixed;
+  right: 20px;
+  bottom: 24px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 50%;
+  background-color: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.scroll-top-btn svg {
+  width: 22px;
+  height: 22px;
+}
+
+.scroll-top-btn:active {
+  opacity: 0.85;
+}
+
+.scroll-top-fade-enter-active,
+.scroll-top-fade-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.scroll-top-fade-enter-from,
+.scroll-top-fade-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
 }
 </style>
