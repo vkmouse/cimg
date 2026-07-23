@@ -30,11 +30,12 @@ function formatYear(startUnix: number): string {
   return String(new Date(startUnix * 1000).getFullYear());
 }
 
-/** 顯示用的日期區間格式，例如「4/26 ~ 4/28」（本地時區，僅月/日）。 */
+/** 顯示用的日期區間格式，例如「04/26 ~ 04/28」（本地時區，僅月/日，補零）。 */
 function formatRange(startUnix: number, endUnix: number): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
   const fmt = (unix: number) => {
     const d = new Date(unix * 1000);
-    return `${d.getMonth() + 1}/${d.getDate()}`;
+    return `${pad(d.getMonth() + 1)}/${pad(d.getDate())}`;
   };
   return `${fmt(startUnix)} ~ ${fmt(endUnix)}`;
 }
