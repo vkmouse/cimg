@@ -30,27 +30,27 @@ export const onRequest: PagesFunction<Env, any, AuthContext> = async (context) =
 
   if (!env.APP_JWT_SECRET) {
     console.error('[auth] 缺少環境變數 APP_JWT_SECRET')
-    return new Response('Unauthorized', { status: 401 })
+    return new Response('Unauthorized1', { status: 401 })
   }
 
   const assertion = request.headers.get('Cf-Access-Jwt-Assertion')
   if (!assertion) {
-    return new Response('Unauthorized', { status: 401 })
+    return new Response('Unauthorized2', { status: 401 })
   }
 
   const commonName = await verifyAccessAssertion(env, assertion)
   if (!commonName) {
-    return new Response('Unauthorized', { status: 401 })
+    return new Response('Unauthorized3', { status: 401 })
   }
 
   const email = resolveEmailByCommonName(env.SERVICE_IDENTITY_MAP, commonName)
   if (!email) {
-    return new Response('Unauthorized', { status: 401 })
+    return new Response('Unauthorized4', { status: 401 })
   }
 
   const user = await getByEmail(env.DB, email)
   if (!user) {
-    return new Response('Unauthorized', { status: 401 })
+    return new Response('Unauthorized5', { status: 401 })
   }
 
   const identity = { email, userId: user.id }

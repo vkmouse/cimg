@@ -49,7 +49,7 @@ export function getAccessHeaders(): HeadersInit {
 export type LoginResult = 'ok' | 'invalid' | 'error'
 
 /**
- * 帶著 localStorage 裡的憑證打 `/api/auth/login`：
+ * 帶著憑證打 `/api/auth/login`：
  * - 200 → 'ok'（同時代表 access_token / refresh_token 這兩個 httpOnly Cookie
  *   已經由伺服器透過 Set-Cookie 寫入瀏覽器，之後打其他 `/api/*` 不需要再帶
  *   Client Id / Secret 以外的東西，靠 `credentials: 'include'` 讓 Cookie 自動帶上）
@@ -59,11 +59,17 @@ export type LoginResult = 'ok' | 'invalid' | 'error'
  *   呼叫端不應清空 localStorage（Service Token 本身可能還是對的，只是應用層
  *   查不到對應身分或伺服器暫時出狀況）
  *
+ * `credentials` 可選：不帶的話讀 localStorage 裡已存的值（給 `AccessGate` 掛載時
+ * 「用舊憑證重新確認一次」的情境用）；帶的話直接用傳入的值打這次請求，不會
+ * 去讀/寫 localStorage——這是特地留給「使用者剛輸入、還沒確定有效」的情境用，
+ * 讓呼叫端可以做到「驗證成功才寫進 localStorage」，不會把還沒驗證過的憑證
+ * 提早存進去。
+ *
  * 這支端點同時取代了原本 `/api/ping` 的健康檢查角色，不需要再另外呼叫 ping。
  */
-export async function login(): Promise<LoginResult> {
-  const credentials = getStoredCredentials()
-  if (!credentials) {
+export async function login(credentials?: AccessCredentials): Promise<LoginResult> {
+  const creds = credentials ?? getStoredCredentials()
+  if (!creds) {
     return 'invalid'
   }
 
@@ -71,8 +77,8 @@ export async function login(): Promise<LoginResult> {
   try {
     response = await fetch('/api/auth/login', {
       headers: {
-        'CF-Access-Client-Id': credentials.clientId,
-        'CF-Access-Client-Secret': credentials.clientSecret,
+        'CF-Access-Client-Id': creds.clientId,
+        'CF-Access-Client-Secret': creds.clientSecret,
       },
       credentials: 'include',
     })

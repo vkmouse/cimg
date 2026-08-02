@@ -50,8 +50,20 @@ async function handleSubmit() {
   }
 
   submitting.value = true
-  storeCredentials({ clientId, clientSecret })
-  await check()
+  // 先不寫 localStorage，直接拿使用者剛輸入的值去試登入；
+  // 確認 200（成功）才真的存進 localStorage，避免把還沒驗證過、
+  // 可能是打錯的憑證提早留在瀏覽器裡。
+  const credentials = { clientId, clientSecret }
+  const result = await login(credentials)
+
+  if (result === 'ok') {
+    storeCredentials(credentials)
+    state.value = 'authenticated'
+  } else if (result === 'invalid') {
+    state.value = 'unauthenticated'
+  } else {
+    state.value = 'error'
+  }
   submitting.value = false
 }
 
