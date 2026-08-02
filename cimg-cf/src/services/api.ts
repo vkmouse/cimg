@@ -6,12 +6,13 @@ import type {
   PhotoListResponse,
   PhotoSortOrder,
 } from "../types";
+import { getAccessHeaders } from "./auth";
 
 /**
  * 取得目前使用者的 ID（回傳第一筆 users 的 id）
  */
 export async function fetchMe(): Promise<{ userId: string }> {
-  const res = await fetch("/api/me");
+  const res = await fetch("/api/me", { headers: getAccessHeaders() });
   if (!res.ok) {
     throw new Error(`無法取得使用者資訊（${res.status}）`);
   }
@@ -42,7 +43,9 @@ export async function fetchPhotoItems(
     params.set("sort", "asc");
   }
   const query = params.toString();
-  const res = await fetch(`/api/photos${query ? `?${query}` : ""}`);
+  const res = await fetch(`/api/photos${query ? `?${query}` : ""}`, {
+    headers: getAccessHeaders(),
+  });
   if (!res.ok) {
     throw new Error(`無法取得照片清單（${res.status}）`);
   }
@@ -71,7 +74,9 @@ export async function fetchPhotoDetail(
     params.set("sort", "asc");
   }
   const query = params.toString();
-  const res = await fetch(`/api/photos/${encodeURIComponent(imageId)}${query ? `?${query}` : ""}`);
+  const res = await fetch(`/api/photos/${encodeURIComponent(imageId)}${query ? `?${query}` : ""}`, {
+    headers: getAccessHeaders(),
+  });
   if (res.status === 404) {
     return null;
   }
@@ -85,7 +90,7 @@ export async function fetchPhotoDetail(
  * 取得目前使用者所有 photo burst（密集拍照期間），依 startDate 新到舊排序，不分頁。
  */
 export async function fetchPhotoBursts(): Promise<PhotoBurstListResponse> {
-  const res = await fetch("/api/photo-bursts");
+  const res = await fetch("/api/photo-bursts", { headers: getAccessHeaders() });
   if (!res.ok) {
     throw new Error(`無法取得 photo burst 清單（${res.status}）`);
   }

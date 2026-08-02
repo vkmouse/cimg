@@ -4,20 +4,17 @@
  */
 export interface Env {
   DB: D1Database
-  POLICY_AUD?: string
-  TEAM_DOMAIN?: string
   /**
-   * `/api/rs/*` 專用的獨立驗證設定（見 functions/_middleware.ts 的 handleRsRequest）。
-   * 與上面 POLICY_AUD（前台 email 登入用）完全分開，對應 Cloudflare Access
-   * 另一個只掛 Service Auth policy 的 Application。這是單純的 server-to-server
-   * 驗證（cimg-rs → cimg-cf），不綁定任何使用者身份。
+   * 全站唯一使用者的 email。身份驗證本身交給 Cloudflare Access（Service Token，
+   * 見 functions/_middleware.ts），這裡只用來查 users 表拿 userId，
+   * 因此不需要再另外解析 JWT 或存放 POLICY_AUD / TEAM_DOMAIN。
    */
-  RS_POLICY_AUD?: string
+  OWNER_EMAIL?: string
 }
 
 /**
  * _middleware.ts 驗證後注入 context.data 的型別。
- * email：來自 Cloudflare Access JWT 或 fallback demo email。
+ * email：來自環境變數 OWNER_EMAIL（全站固定單一使用者）。
  * userId：由 middleware 以 email 查詢 DB 後取得的 users.id。
  */
 export interface AuthContext extends Record<string, unknown> {
