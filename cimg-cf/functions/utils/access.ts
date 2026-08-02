@@ -164,8 +164,44 @@ export function resolveEmailByCommonNameDebug(
   let identityMap: Record<string, unknown>
   try {
     identityMap = JSON.parse(serviceIdentityMap)
-  } catch {
-    return { email: null, reason: 'SERVICE_IDENTITY_MAP 不是合法 JSON' }
+  } catch (err) {
+    // TEMP DEBUG：把 JSON.parse 失敗的原始字串內容跟頭尾字元編碼一起印出來，
+    // 因為「看起來一樣」的字串，常常是打字軟體自動把直引號 " 換成
+    // 彎引號 “ ” 造成的，肉眼在聊天室或 README 裡完全看不出差異。
+    const trimmed = serviceIdentityMap.trim()
+    const firstChar = serviceIdentityMap.charAt(0)
+    const lastChar = serviceIdentityMap.charAt(serviceIdentityMap.length - 1)
+    return {
+      email: null,
+      reason: `SERVICE_IDENTITY_MAP 不是合法 JSON：${err instanceof Error ? err.message : String(err)}`,
+      compare: {
+        raw_value: {
+          expected: '一段合法 JSON 字串，例如 {"key.access":"email@example.com"}（雙引號必須是半形直引號 U+0022）',
+          actual: serviceIdentityMap,
+          match: false,
+        },
+        first_char: {
+          expected: `{ (U+007B)`,
+          actual: `"${firstChar}" (U+${firstChar.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0')})`,
+          match: firstChar === '{',
+        },
+        last_char: {
+          expected: `} (U+007D)`,
+          actual: `"${lastChar}" (U+${lastChar.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0')})`,
+          match: lastChar === '}',
+        },
+        has_leading_or_trailing_whitespace: {
+          expected: false,
+          actual: trimmed !== serviceIdentityMap,
+          match: trimmed === serviceIdentityMap,
+        },
+        contains_smart_quotes: {
+          expected: false,
+          actual: /[\u201C\u201D\u2018\u2019]/.test(serviceIdentityMap),
+          match: !/[\u201C\u201D\u2018\u2019]/.test(serviceIdentityMap),
+        },
+      },
+    }
   }
   const email = identityMap[commonName]
   if (typeof email === 'string' && email) {
