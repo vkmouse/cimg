@@ -2,7 +2,7 @@
   Self-contained 的 Cloudflare Access（Service Token）驗證閘門。
 
   用法：把要保護的內容放進預設 slot，掛載時會自動檢查
-  localStorage 裡有沒有存憑證、帶著憑證打一次 /api/ping：
+  localStorage 裡有沒有存憑證、帶著憑證打一次 /api/auth/login：
     - 沒存值 或 收到 403 → 顯示輸入頁面，讓使用者重新輸入
     - 收到非 200/403（網路錯誤、逾時、500 等）→ 顯示「請聯絡管理者」
     - 200 → 顯示 slot 內容
@@ -14,7 +14,7 @@
 -->
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { getStoredCredentials, storeCredentials, clearCredentials, verifyAccess } from '../services/auth'
+import { getStoredCredentials, storeCredentials, clearCredentials, login } from '../services/auth'
 
 type GateState = 'checking' | 'unauthenticated' | 'error' | 'authenticated'
 
@@ -31,7 +31,7 @@ async function check() {
     return
   }
 
-  const result = await verifyAccess()
+  const result = await login()
   if (result === 'ok') {
     state.value = 'authenticated'
   } else if (result === 'invalid') {

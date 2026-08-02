@@ -1,6 +1,6 @@
 import { computed, type Ref } from "vue";
-import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/vue-query";
-import { fetchMe, fetchPhotoItems } from "../services/api";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/vue-query";
+import { fetchPhotoItems } from "../services/api";
 import type { PhotoCursor, PhotoDateFilter, PhotoListResponse, PhotoSortOrder } from "../types";
 
 /** 列表頁一格縮圖需要的最小資料：imageId 用來點擊導頁到 detail 頁，imageUrl 是縮圖網址。 */
@@ -24,6 +24,10 @@ function thumbnailsOf(items: { imageId: string; imageUrl: string | null }[]): Ph
  * `imageUrl`（`/api/img?...`），前端不需要再另外呼叫 `/api/config`
  * 或自己用 AWS SDK 組 presigned URL。
  *
+ * 身份確認已經由 `AccessGate.vue` 統一在外層做完（`<RouterView />` 整個包在
+ * `AccessGate` 裡，只有 `state === 'authenticated'` 才會 render 到這裡），
+ * 這裡不需要再另外呼叫一次「確認身份」的 API 才能開始打 `/api/photos`。
+ *
  * `filter` 是外部傳入的日期區間篩選條件（響應式），`sort` 是外部傳入的排序方向（響應式，預設 `'desc'`）；
  * 兩者放進 `queryKey` 後，篩選條件或排序一變，vue-query 會視為全新的查詢，自動捨棄舊分頁、從第一頁重新抓取
  * （排序方向改變時，舊的 keyset cursor 也無法沿用，所以本來就必須重新從第一頁抓）。
@@ -33,15 +37,6 @@ export function usePhotoLibrary(
   sort?: Ref<PhotoSortOrder>,
 ) {
   const queryClient = useQueryClient();
-
-  // 先確認使用者身份（回傳值本身不需要用到，只是要讓使用者資訊還沒確認好之前，
-  // 不要提早打 /api/photos）。同一個 session 內不會變，staleTime 設 Infinity 不重打。
-  const meQuery = useQuery({
-    queryKey: ["me"],
-    queryFn: fetchMe,
-    staleTime: Infinity,
-    retry: 1,
-  });
 
   const photosQuery = useInfiniteQuery({
     queryKey: ["photos", filter ?? null, sort ?? null],
@@ -54,7 +49,6 @@ export function usePhotoLibrary(
     initialPageParam: undefined as PhotoCursor | undefined,
     getNextPageParam: (lastPage: PhotoListResponse) =>
       lastPage.hasMore ? (lastPage.nextCursor ?? undefined) : undefined,
-    enabled: computed(() => meQuery.isSuccess.value),
   });
 
   const photos = computed<PhotoThumbnail[]>(() => {
@@ -62,22 +56,18 @@ export function usePhotoLibrary(
     return pages.flatMap((page) => thumbnailsOf(page.items));
   });
 
-  // 首次載入中：me 還沒確認，或 me 成功後 photos 第一頁還在抓
-  const loading = computed(
-    () => meQuery.isPending.value || (meQuery.isSuccess.value && photosQuery.isPending.value),
-  );
+  const loading = computed(() => photosQuery.isPending.value);
   const loadingMore = computed(() => photosQuery.isFetchingNextPage.value);
   const hasMore = computed(() => photosQuery.hasNextPage.value ?? false);
 
   const error = computed(() => {
-    const err = meQuery.error.value ?? photosQuery.error.value;
+    const err = photosQuery.error.value;
     if (!err) return null;
     return err instanceof Error ? err.message : String(err);
   });
 
   function load() {
-    // 重新整理：把 me / photos 都標成過期並重新打（photos 的第一頁到目前已載入的頁數都會重抓）
-    queryClient.invalidateQueries({ queryKey: ["me"] });
+    // 重新整理：把 photos 標成過期並重新打（第一頁到目前已載入的頁數都會重抓）
     queryClient.invalidateQueries({ queryKey: ["photos"] });
   }
 

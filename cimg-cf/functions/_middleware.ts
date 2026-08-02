@@ -1,37 +1,50 @@
 /**
  * 全站唯一的 _middleware.ts。
  *
- * 身份驗證交給 Cloudflare Access（Service Token）在 edge 層處理：
- * - Bypass：`/`、`/*.js`、`/*.css`（靜態資源）、`/api/img`（見下方說明）
- * - Include：其餘所有路徑，需帶 `CF-Access-Client-Id` / `CF-Access-Client-Secret`
- *   才能通過 Access，通過之後才會打到這支 middleware。
+ * `/api/auth/login`、`/api/auth/refresh` 這兩條路徑各自處理自己的驗證邏輯
+ * （login 驗 Cf-Access-Jwt-Assertion，refresh 驗 refresh_token Cookie），
+ * 這裡直接放行、不重複驗證。
  *
- * 因此這裡不再解析/驗證任何 JWT，單純把「全站唯一使用者」的身份注入
- * context.data：email 直接讀環境變數 OWNER_EMAIL，userId 用這個 email
- * 查 users 表取得。
+ * 其餘所有 `/api/*` 路徑（含 `/api/img`，因為 Cookie 現在涵蓋整個 `/api/*`，
+ * 不再只限縮給 `/api/img`）一律只驗 `access_token` Cookie 裡的 App JWT
+ * 簽章 / 效期，直接從 payload 拿 email / userId 塞進 context.data，
+ * **不再查 DB**（DB 查詢只發生在 functions/api/auth/login.ts 簽發 token 的當下）。
  *
- * 注意：`/api/img` 因為是給 <img src="..."> 直接載入（瀏覽器無法帶自訂
- * header），所以被排進 Access 的 Bypass，不會經過這支 middleware 的驗證，
- * 也不需要（imageService 內部另有自己的 credential 查找邏輯）。
+ * `/api/img` 在 Access edge 仍設定 Bypass（瀏覽器 `<img src="...">` 無法帶
+ * 自訂 header），但瀏覽器對同源請求會自動帶上 Cookie，所以一樣能被
+ * access_token 保護到，不再是「完全沒驗證」的洞。
  */
 import type { AuthContext, Env } from './types'
-import { getByEmail } from './repositories/userRepository'
+import { verifyAppToken } from './utils/jwt'
+import { ACCESS_TOKEN_COOKIE_NAME, getCookie } from './utils/cookie'
+
+const SKIP_AUTH_PATHS = new Set(['/api/auth/login', '/api/auth/refresh'])
 
 export const onRequest: PagesFunction<Env, any, AuthContext> = async (context) => {
-  const { env } = context
+  const { env, request } = context
+  const { pathname } = new URL(request.url)
 
-  if (!env.OWNER_EMAIL) {
-    console.error('[auth] 缺少環境變數 OWNER_EMAIL')
+  if (SKIP_AUTH_PATHS.has(pathname)) {
+    return await context.next()
+  }
+
+  if (!env.APP_JWT_SECRET) {
+    console.error('[auth] 缺少環境變數 APP_JWT_SECRET')
     return new Response('Unauthorized', { status: 401 })
   }
 
-  const user = await getByEmail(env.DB, env.OWNER_EMAIL)
-  if (!user) {
+  const token = getCookie(request.headers.get('Cookie'), ACCESS_TOKEN_COOKIE_NAME)
+  if (!token) {
     return new Response('Unauthorized', { status: 401 })
   }
 
-  context.data.email = env.OWNER_EMAIL
-  context.data.userId = user.id
+  const identity = await verifyAppToken(env.APP_JWT_SECRET, token, 'access')
+  if (!identity) {
+    return new Response('Unauthorized', { status: 401 })
+  }
+
+  context.data.email = identity.email
+  context.data.userId = identity.userId
 
   return await context.next()
 }

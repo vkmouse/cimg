@@ -46,15 +46,22 @@ export function getAccessHeaders(): HeadersInit {
   }
 }
 
-export type VerifyResult = 'ok' | 'invalid' | 'error'
+export type LoginResult = 'ok' | 'invalid' | 'error'
 
 /**
- * 帶著 localStorage 裡的憑證打 /api/ping：
- * - 200 → 'ok'
- * - 403（或沒有存值）→ 'invalid'，代表憑證錯誤，呼叫端應該清空 localStorage
- * - 其他情況（網路錯誤、逾時、非 200/403 狀態碼）→ 'error'，呼叫端不應清空 localStorage
+ * 帶著 localStorage 裡的憑證打 `/api/auth/login`：
+ * - 200 → 'ok'（同時代表 access_token / refresh_token 這兩個 httpOnly Cookie
+ *   已經由伺服器透過 Set-Cookie 寫入瀏覽器，之後打其他 `/api/*` 不需要再帶
+ *   Client Id / Secret 以外的東西，靠 `credentials: 'include'` 讓 Cookie 自動帶上）
+ * - 403（Access edge 直接擋下，代表 Service Token 本身無效）→ 'invalid'，
+ *   呼叫端應該清空 localStorage，讓使用者重新輸入
+ * - 其他情況（網路錯誤、逾時、401 等應用層拒絕、其他非 200/403 狀態碼）→ 'error'，
+ *   呼叫端不應清空 localStorage（Service Token 本身可能還是對的，只是應用層
+ *   查不到對應身分或伺服器暫時出狀況）
+ *
+ * 這支端點同時取代了原本 `/api/ping` 的健康檢查角色，不需要再另外呼叫 ping。
  */
-export async function verifyAccess(): Promise<VerifyResult> {
+export async function login(): Promise<LoginResult> {
   const credentials = getStoredCredentials()
   if (!credentials) {
     return 'invalid'
@@ -62,11 +69,12 @@ export async function verifyAccess(): Promise<VerifyResult> {
 
   let response: Response
   try {
-    response = await fetch('/api/ping', {
+    response = await fetch('/api/auth/login', {
       headers: {
         'CF-Access-Client-Id': credentials.clientId,
         'CF-Access-Client-Secret': credentials.clientSecret,
       },
+      credentials: 'include',
     })
   } catch {
     return 'error'
@@ -79,4 +87,36 @@ export async function verifyAccess(): Promise<VerifyResult> {
     return 'invalid'
   }
   return 'error'
+}
+
+/**
+ * access token 過期（收到 401）時，用 refresh_token Cookie 換一份新的
+ * access token；成功回傳 true（新的 access_token Cookie 已經由 Set-Cookie 寫入），
+ * 失敗（refresh token 也過期/不存在、網路錯誤等）回傳 false，呼叫端應該視為
+ * 整個 session 已失效，導回登入流程（重新呼叫 `login()`）。
+ *
+ * 依然要帶 Client Id / Secret header，因為 `/api/auth/refresh` 本身也在
+ * Access edge 的一般保護範圍內（不在 Bypass 清單），Access 每次都要驗證一次
+ * Service Token；這跟「不用 refresh Client Id / Secret」不衝突——Client Id /
+ * Secret 是長效憑證，本來就每次直接帶，不需要換發新的。
+ */
+export async function refreshAccessToken(): Promise<boolean> {
+  const credentials = getStoredCredentials()
+  if (!credentials) {
+    return false
+  }
+
+  try {
+    const response = await fetch('/api/auth/refresh', {
+      method: 'POST',
+      headers: {
+        'CF-Access-Client-Id': credentials.clientId,
+        'CF-Access-Client-Secret': credentials.clientSecret,
+      },
+      credentials: 'include',
+    })
+    return response.status === 200
+  } catch {
+    return false
+  }
 }

@@ -5,17 +5,47 @@
 export interface Env {
   DB: D1Database
   /**
-   * 全站唯一使用者的 email。身份驗證本身交給 Cloudflare Access（Service Token，
-   * 見 functions/_middleware.ts），這裡只用來查 users 表拿 userId，
-   * 因此不需要再另外解析 JWT 或存放 POLICY_AUD / TEAM_DOMAIN。
+   * Cloudflare Access（Zero Trust）簽發 Cf-Access-Jwt-Assertion 時使用的
+   * team domain（例如 `your-team.cloudflareaccess.com`），用來組出驗證簽章
+   * 用的 JWKS 網址：`https://<ACCESS_TEAM_DOMAIN>/cdn-cgi/access/certs`。
+   * 只有 functions/api/auth/login.ts 會用到。一般環境變數（非 secret）。
    */
-  OWNER_EMAIL?: string
+  ACCESS_TEAM_DOMAIN?: string
+  /**
+   * 這個 Access Application 的 Audience (AUD) Tag，驗證 Cf-Access-Jwt-Assertion
+   * 時要比對的 `aud`，確保 token 是發給這個 Application 的。
+   * 只有 functions/api/auth/login.ts 會用到。一般環境變數（非 secret）。
+   */
+  ACCESS_AUD?: string
+  /**
+   * `common_name`（Service Token 名稱，如 `partner-alice`）→ email 的對照表，
+   * JSON 字串形式，例如 `{"partner-alice.access": "alice@example.com"}`。
+   * 只有 functions/api/auth/login.ts 會用到。Client Id 本身不是敏感資訊，
+   * 所以是一般環境變數（非 secret）。
+   */
+  SERVICE_IDENTITY_MAP?: string
+  /**
+   * 用來簽發 / 驗證 access token 與 refresh token（見下方 AuthContext 說明）
+   * 的共用密鑰，兩種 token 靠 payload 裡的 `type` 欄位互相區分。
+   * 是 secret，務必透過 `wrangler secret put APP_JWT_SECRET` 設定，不要寫進版控。
+   */
+  APP_JWT_SECRET?: string
 }
 
 /**
  * _middleware.ts 驗證後注入 context.data 的型別。
- * email：來自環境變數 OWNER_EMAIL（全站固定單一使用者）。
- * userId：由 middleware 以 email 查詢 DB 後取得的 users.id。
+ *
+ * 身份解析分成三個端點/路徑（詳見 functions/_middleware.ts）：
+ * - `functions/api/auth/login.ts`：受 Cloudflare Access（Service Token）保護，
+ *   驗證 Cf-Access-Jwt-Assertion 簽章後，用 payload 裡的 common_name 查
+ *   SERVICE_IDENTITY_MAP 對照表取得 email，查 users 表拿 userId，簽發
+ *   access token（8hr）+ refresh token（10 年），皆用 httpOnly Cookie
+ *  （Path=`/api`，涵蓋整個 `/api/*`）回傳。
+ * - `functions/api/auth/refresh.ts`：只驗證 refresh_token Cookie，不查 DB，
+ *   直接沿用 token payload 裡的 email/userId，換發新的 access token。
+ * - 其餘所有 `/api/*`（含 `/api/img`，因為 Cookie 現在涵蓋整個 `/api/*`，
+ *   瀏覽器對 `<img>` 標籤發出的同源請求也會自動帶上）：只驗證 access_token
+ *   Cookie 裡的 App JWT 簽章 / 效期，不查 DB，直接從 payload 拿 email / userId。
  */
 export interface AuthContext extends Record<string, unknown> {
   email: string

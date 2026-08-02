@@ -6,17 +6,29 @@ import type {
   PhotoListResponse,
   PhotoSortOrder,
 } from "../types";
-import { getAccessHeaders } from "./auth";
+import { getAccessHeaders, refreshAccessToken } from "./auth";
 
 /**
- * 取得目前使用者的 ID（回傳第一筆 users 的 id）
+ * 帶著 Access edge 用的 Client Id / Secret header + app 自己的 JWT Cookie
+ * （`credentials: 'include'`）呼叫 `/api/*`；收到 401（access_token 過期）時，
+ * 自動打一次 `/api/auth/refresh` 換新的 access token，成功的話原始請求重打
+ * 一次，失敗就把原本的 401 回應原封不動回傳給呼叫端（呼叫端會走原本的錯誤處理）。
  */
-export async function fetchMe(): Promise<{ userId: string }> {
-  const res = await fetch("/api/me", { headers: getAccessHeaders() });
-  if (!res.ok) {
-    throw new Error(`無法取得使用者資訊（${res.status}）`);
+async function authorizedFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  const withAuth = (): RequestInit => ({
+    ...init,
+    credentials: "include",
+    headers: { ...getAccessHeaders(), ...(init.headers ?? {}) },
+  });
+
+  let res = await fetch(input, withAuth());
+  if (res.status === 401) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) {
+      res = await fetch(input, withAuth());
+    }
   }
-  return res.json();
+  return res;
 }
 
 /**
@@ -43,9 +55,7 @@ export async function fetchPhotoItems(
     params.set("sort", "asc");
   }
   const query = params.toString();
-  const res = await fetch(`/api/photos${query ? `?${query}` : ""}`, {
-    headers: getAccessHeaders(),
-  });
+  const res = await authorizedFetch(`/api/photos${query ? `?${query}` : ""}`);
   if (!res.ok) {
     throw new Error(`無法取得照片清單（${res.status}）`);
   }
@@ -74,9 +84,9 @@ export async function fetchPhotoDetail(
     params.set("sort", "asc");
   }
   const query = params.toString();
-  const res = await fetch(`/api/photos/${encodeURIComponent(imageId)}${query ? `?${query}` : ""}`, {
-    headers: getAccessHeaders(),
-  });
+  const res = await authorizedFetch(
+    `/api/photos/${encodeURIComponent(imageId)}${query ? `?${query}` : ""}`,
+  );
   if (res.status === 404) {
     return null;
   }
@@ -90,7 +100,7 @@ export async function fetchPhotoDetail(
  * 取得目前使用者所有 photo burst（密集拍照期間），依 startDate 新到舊排序，不分頁。
  */
 export async function fetchPhotoBursts(): Promise<PhotoBurstListResponse> {
-  const res = await fetch("/api/photo-bursts", { headers: getAccessHeaders() });
+  const res = await authorizedFetch("/api/photo-bursts");
   if (!res.ok) {
     throw new Error(`無法取得 photo burst 清單（${res.status}）`);
   }
