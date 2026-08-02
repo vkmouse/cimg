@@ -1,11 +1,11 @@
 /**
- * 全站唯一的 _middleware.ts。
- *
- * 只保護 `/api/*` 路徑；根目錄 `/`、靜態資源（`*.js`、`*.css` 等 SPA 打包出來的
- * 檔案）一律直接放行，不做任何驗證——這些是 SPA 的殼（`index.html` + JS/CSS），
- * 一定要能在「使用者還沒登入」的狀態下先載入，瀏覽器裡的 `AccessGate.vue` 才有
- * 機會執行、顯示輸入畫面、呼叫 `/api/auth/login`。如果連這個殼都要求先有
- * `access_token` Cookie，會變成「要先登入才能載入讓你登入的畫面」的死結。
+ * `/api/*` 專屬的 _middleware.ts（放在 functions/api/ 底下，Cloudflare Pages
+ * Functions 會依檔案所在目錄自動限縮套用範圍，只套用在 `/api/*`，不會影響
+ * 根目錄 `/`、`*.js`/`*.css` 等靜態資源——SPA 的殼因此永遠能直接載入，瀏覽器
+ * 裡的 `AccessGate.vue` 才有機會執行、顯示輸入畫面、呼叫 `/api/auth/login`；
+ * 如果放在 functions/ 根目錄，會連靜態檔案都套用到，變成「要先登入才能載入
+ * 讓你登入的畫面」的死結（第 26、27 輪那次事故就是這樣來的，這次直接把檔案
+ * 搬到這裡從結構上避免同樣的錯誤再發生，不再靠程式碼判斷 pathname 手動模擬）。
  *
  * `/api/auth/login`、`/api/auth/refresh` 這兩條路徑各自處理自己的驗證邏輯
  * （login 驗 Cf-Access-Jwt-Assertion，refresh 驗 refresh_token Cookie），
@@ -20,20 +20,15 @@
  * 自訂 header），但瀏覽器對同源請求會自動帶上 Cookie，所以一樣能被
  * access_token 保護到，不再是「完全沒驗證」的洞。
  */
-import type { AuthContext, Env } from './types'
-import { verifyAppToken } from './utils/jwt'
-import { ACCESS_TOKEN_COOKIE_NAME, getCookie } from './utils/cookie'
+import type { AuthContext, Env } from '../types'
+import { verifyAppToken } from '../utils/jwt'
+import { ACCESS_TOKEN_COOKIE_NAME, getCookie } from '../utils/cookie'
 
 const SKIP_AUTH_PATHS = new Set(['/api/auth/login', '/api/auth/refresh'])
 
 export const onRequest: PagesFunction<Env, any, AuthContext> = async (context) => {
   const { env, request } = context
   const { pathname } = new URL(request.url)
-
-  // 只管 /api/*，其餘一律放行（SPA 殼、靜態資源，讓瀏覽器一定載得到）。
-  if (!pathname.startsWith('/api/')) {
-    return await context.next()
-  }
 
   if (SKIP_AUTH_PATHS.has(pathname)) {
     return await context.next()

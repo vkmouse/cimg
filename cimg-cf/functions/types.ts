@@ -35,7 +35,7 @@ export interface Env {
 /**
  * _middleware.ts 驗證後注入 context.data 的型別。
  *
- * 身份解析分成三個端點/路徑（詳見 functions/_middleware.ts）：
+ * 身份解析分成三個端點/路徑（詳見 functions/api/_middleware.ts）：
  * - `functions/api/auth/login.ts`：受 Cloudflare Access（Service Token）保護，
  *   驗證 Cf-Access-Jwt-Assertion 簽章後，用 payload 裡的 common_name 查
  *   SERVICE_IDENTITY_MAP 對照表取得 email，查 users 表拿 userId，簽發
