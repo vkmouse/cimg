@@ -17,7 +17,9 @@
  */
 import type { AuthContext, Env } from '../../types'
 import { getByEmail } from '../../repositories/userRepository'
-import { resolveEmailByCommonName, verifyAccessAssertion } from '../../utils/access'
+import { resolveEmailByCommonNameDebug, verifyAccessAssertion } from '../../utils/access'
+// TEMP DEBUG：原本是 import { resolveEmailByCommonName, verifyAccessAssertion }，
+// 找到問題後記得改回來（同時可以把 access.ts 裡的 resolveEmailByCommonNameDebug 刪掉）。
 import { signAccessToken, signRefreshToken, ACCESS_TOKEN_TTL_SECONDS, REFRESH_TOKEN_TTL_SECONDS } from '../../utils/jwt'
 import { ACCESS_TOKEN_COOKIE_NAME, REFRESH_TOKEN_COOKIE_NAME, buildAppCookie } from '../../utils/cookie'
 
@@ -30,27 +32,35 @@ export const onRequest: PagesFunction<Env, any, AuthContext> = async (context) =
 
   if (!env.APP_JWT_SECRET) {
     console.error('[auth] 缺少環境變數 APP_JWT_SECRET')
-    return new Response('Unauthorized1', { status: 401 })
+    return new Response('Unauthorized', { status: 401 })
   }
 
   const assertion = request.headers.get('Cf-Access-Jwt-Assertion')
   if (!assertion) {
-    return new Response('Unauthorized2', { status: 401 })
+    return new Response('Unauthorized', { status: 401 })
   }
 
   const commonName = await verifyAccessAssertion(env, assertion)
   if (!commonName) {
-    return new Response('Unauthorized3', { status: 401 })
+    return new Response('Unauthorized', { status: 401 })
   }
 
-  const email = resolveEmailByCommonName(env.SERVICE_IDENTITY_MAP, commonName)
+  // TEMP DEBUG：暫時把失敗原因回傳到前端方便除錯，找到問題後記得改回：
+  //   const email = resolveEmailByCommonName(env.SERVICE_IDENTITY_MAP, commonName)
+  //   if (!email) {
+  //     return new Response('Unauthorized', { status: 401 })
+  //   }
+  const { email, reason } = resolveEmailByCommonNameDebug(env.SERVICE_IDENTITY_MAP, commonName)
   if (!email) {
-    return new Response('Unauthorized4', { status: 401 })
+    return new Response(JSON.stringify({ error: 'Unauthorized', debug: reason }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    })
   }
 
   const user = await getByEmail(env.DB, email)
   if (!user) {
-    return new Response('Unauthorized5', { status: 401 })
+    return new Response('Unauthorized', { status: 401 })
   }
 
   const identity = { email, userId: user.id }

@@ -62,3 +62,34 @@ export function resolveEmailByCommonName(
   const email = identityMap[commonName]
   return typeof email === 'string' && email ? email : null
 }
+
+/**
+ * TEMP DEBUG（除錯用，找到問題後記得刪除這個函式，login.ts 改回呼叫
+ * 上面的 resolveEmailByCommonName）：
+ * 邏輯跟 resolveEmailByCommonName 完全一樣，差別是失敗時會多回傳具體原因，
+ * 方便暫時把除錯資訊回傳到前端。
+ */
+export function resolveEmailByCommonNameDebug(
+  serviceIdentityMap: string | undefined,
+  commonName: string,
+): { email: string | null; reason?: string } {
+  if (!serviceIdentityMap) {
+    return { email: null, reason: 'SERVICE_IDENTITY_MAP 環境變數未設定' }
+  }
+  let identityMap: Record<string, unknown>
+  try {
+    identityMap = JSON.parse(serviceIdentityMap)
+  } catch {
+    return { email: null, reason: 'SERVICE_IDENTITY_MAP 不是合法 JSON' }
+  }
+  const email = identityMap[commonName]
+  if (typeof email === 'string' && email) {
+    return { email }
+  }
+  return {
+    email: null,
+    reason: `commonName "${commonName}" 沒有在 SERVICE_IDENTITY_MAP 對照表裡找到對應的 email（目前對照表的 keys: ${
+      Object.keys(identityMap).join(', ') || '(空物件)'
+    }）`,
+  }
+}
