@@ -41,26 +41,47 @@ export async function verifyAccessAssertion(
 }
 
 /**
+ * TEMP DEBUG（除錯用，找到問題後整個刪掉）：
+ * 不驗證簽章，單純把 JWT 的 payload 解出來，只給除錯訊息用，
+ * **絕對不能**拿這裡解出來的值做任何授權判斷（因為沒驗證過，可以偽造）。
+ */
+function decodeJwtPayloadUnsafeForDebug(token: string): Record<string, unknown> | null {
+  try {
+    const payloadB64Url = token.split('.')[1]
+    if (!payloadB64Url) return null
+    const base64 = payloadB64Url.replace(/-/g, '+').replace(/_/g, '/')
+    const json = atob(base64)
+    return JSON.parse(json)
+  } catch {
+    return null
+  }
+}
+
+/**
  * TEMP DEBUG（除錯用，找到問題後記得刪除這個函式，login.ts 改回呼叫
  * 上面的 verifyAccessAssertion）：
- * 邏輯跟 verifyAccessAssertion 完全一樣，差別是失敗時會多回傳具體原因
- * （包含原本被 `catch {}` 吞掉的錯誤訊息，例如簽章驗證失敗、aud 不符等）。
+ * 邏輯跟 verifyAccessAssertion 完全一樣，差別是失敗時會多回傳具體原因，
+ * 而且會**逐項列出「預期值 vs 實際值」**（iss / aud / exp / common_name），
+ * 不只是一句錯誤訊息，方便直接在 Response body 裡肉眼比對。
  */
 export async function verifyAccessAssertionDebug(
   env: Pick<Env, 'ACCESS_TEAM_DOMAIN' | 'ACCESS_AUD'>,
   assertion: string,
-): Promise<{ commonName: string | null; reason?: string }> {
+): Promise<{ commonName: string | null; reason?: string; compare?: Record<string, { expected: unknown; actual: unknown; match: boolean }> }> {
   if (!env.ACCESS_TEAM_DOMAIN || !env.ACCESS_AUD) {
     return { commonName: null, reason: '缺少環境變數 ACCESS_TEAM_DOMAIN 或 ACCESS_AUD' }
   }
+
+  const expectedIss = `https://${env.ACCESS_TEAM_DOMAIN}`
+  const expectedAud = env.ACCESS_AUD
 
   try {
     const jwks = createRemoteJWKSet(
       new URL(`https://${env.ACCESS_TEAM_DOMAIN}/cdn-cgi/access/certs`),
     )
     const { payload } = await jwtVerify(assertion, jwks, {
-      issuer: `https://${env.ACCESS_TEAM_DOMAIN}`,
-      audience: env.ACCESS_AUD,
+      issuer: expectedIss,
+      audience: expectedAud,
     })
     if (typeof payload.common_name !== 'string' || !payload.common_name) {
       return {
@@ -70,9 +91,36 @@ export async function verifyAccessAssertionDebug(
     }
     return { commonName: payload.common_name }
   } catch (err) {
+    // 簽章驗證失敗了，但為了讓你知道「到底是哪個值對不起來」，
+    // 這裡額外把 token 沒驗證過的 payload 解出來，跟預期值逐項比對列出。
+    const unverifiedPayload = decodeJwtPayloadUnsafeForDebug(assertion)
+    const actualAud = unverifiedPayload?.aud
+    const actualIss = unverifiedPayload?.iss
+    const actualExp = unverifiedPayload?.exp
+    const nowSeconds = Math.floor(Date.now() / 1000)
+
+    const compare = {
+      iss: {
+        expected: expectedIss,
+        actual: actualIss ?? '(無法解出 / token 格式有問題)',
+        match: actualIss === expectedIss,
+      },
+      aud: {
+        expected: expectedAud,
+        actual: actualAud ?? '(無法解出 / token 格式有問題)',
+        match: Array.isArray(actualAud) ? actualAud.includes(expectedAud) : actualAud === expectedAud,
+      },
+      exp: {
+        expected: `> ${nowSeconds}（現在時間）`,
+        actual: actualExp ?? '(無法解出)',
+        match: typeof actualExp === 'number' ? actualExp > nowSeconds : false,
+      },
+    }
+
     return {
       commonName: null,
-      reason: `Cf-Access-Jwt-Assertion 驗證失敗：${err instanceof Error ? err.message : String(err)}（常見原因：ACCESS_TEAM_DOMAIN 或 ACCESS_AUD 值填錯、assertion 過期、或這個 token 不屬於這個 Access Application）`,
+      reason: `Cf-Access-Jwt-Assertion 驗證失敗：${err instanceof Error ? err.message : String(err)}`,
+      compare,
     }
   }
 }
@@ -103,13 +151,13 @@ export function resolveEmailByCommonName(
 /**
  * TEMP DEBUG（除錯用，找到問題後記得刪除這個函式，login.ts 改回呼叫
  * 上面的 resolveEmailByCommonName）：
- * 邏輯跟 resolveEmailByCommonName 完全一樣，差別是失敗時會多回傳具體原因，
- * 方便暫時把除錯資訊回傳到前端。
+ * 邏輯跟 resolveEmailByCommonName 完全一樣，差別是失敗時會多回傳「實際值 vs
+ * 對照表 keys」的逐項比對，方便暫時把除錯資訊回傳到前端。
  */
 export function resolveEmailByCommonNameDebug(
   serviceIdentityMap: string | undefined,
   commonName: string,
-): { email: string | null; reason?: string } {
+): { email: string | null; reason?: string; compare?: Record<string, { expected: unknown; actual: unknown; match: boolean }> } {
   if (!serviceIdentityMap) {
     return { email: null, reason: 'SERVICE_IDENTITY_MAP 環境變數未設定' }
   }
@@ -123,10 +171,16 @@ export function resolveEmailByCommonNameDebug(
   if (typeof email === 'string' && email) {
     return { email }
   }
+  const keys = Object.keys(identityMap)
   return {
     email: null,
-    reason: `commonName "${commonName}" 沒有在 SERVICE_IDENTITY_MAP 對照表裡找到對應的 email（目前對照表的 keys: ${
-      Object.keys(identityMap).join(', ') || '(空物件)'
-    }）`,
+    reason: `commonName 沒有在 SERVICE_IDENTITY_MAP 對照表裡找到對應的 email`,
+    compare: {
+      common_name: {
+        expected: `SERVICE_IDENTITY_MAP 的其中一個 key（目前有: ${keys.join(', ') || '(空物件)'}）`,
+        actual: commonName,
+        match: keys.includes(commonName),
+      },
+    },
   }
 }

@@ -24,9 +24,12 @@ import { resolveEmailByCommonNameDebug, verifyAccessAssertionDebug } from '../..
 import { signAccessToken, signRefreshToken, ACCESS_TOKEN_TTL_SECONDS, REFRESH_TOKEN_TTL_SECONDS } from '../../utils/jwt'
 import { ACCESS_TOKEN_COOKIE_NAME, REFRESH_TOKEN_COOKIE_NAME, buildAppCookie } from '../../utils/cookie'
 
-// TEMP DEBUG：統一組出「401 + 除錯原因」的 Response，找到問題後這個函式可以整個刪掉。
-function unauthorizedDebug(reason: string): Response {
-  return new Response(JSON.stringify({ error: 'Unauthorized', debug: reason }), {
+// TEMP DEBUG：統一組出「401 + 除錯原因（含逐項比對值）」的 Response，找到問題後這個函式可以整個刪掉。
+function unauthorizedDebug(
+  reason: string,
+  compare?: Record<string, { expected: unknown; actual: unknown; match: boolean }>,
+): Response {
+  return new Response(JSON.stringify({ error: 'Unauthorized', debug: reason, compare }), {
     status: 401,
     headers: { 'Content-Type': 'application/json' },
   })
@@ -55,9 +58,9 @@ export const onRequest: PagesFunction<Env, any, AuthContext> = async (context) =
   //   if (!commonName) {
   //     return new Response('Unauthorized', { status: 401 })
   //   }
-  const { commonName, reason: commonNameFailReason } = await verifyAccessAssertionDebug(env, assertion)
+  const { commonName, reason: commonNameFailReason, compare: commonNameCompare } = await verifyAccessAssertionDebug(env, assertion)
   if (!commonName) {
-    return unauthorizedDebug(commonNameFailReason ?? '未知原因')
+    return unauthorizedDebug(commonNameFailReason ?? '未知原因', commonNameCompare)
   }
 
   // TEMP DEBUG：暫時把失敗原因回傳到前端方便除錯，找到問題後記得改回：
@@ -65,9 +68,9 @@ export const onRequest: PagesFunction<Env, any, AuthContext> = async (context) =
   //   if (!email) {
   //     return new Response('Unauthorized', { status: 401 })
   //   }
-  const { email, reason } = resolveEmailByCommonNameDebug(env.SERVICE_IDENTITY_MAP, commonName)
+  const { email, reason, compare } = resolveEmailByCommonNameDebug(env.SERVICE_IDENTITY_MAP, commonName)
   if (!email) {
-    return unauthorizedDebug(reason ?? '未知原因')
+    return unauthorizedDebug(reason ?? '未知原因', compare)
   }
 
   const user = await getByEmail(env.DB, email)
