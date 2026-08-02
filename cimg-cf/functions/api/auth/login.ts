@@ -17,11 +17,20 @@
  */
 import type { AuthContext, Env } from '../../types'
 import { getByEmail } from '../../repositories/userRepository'
-import { resolveEmailByCommonNameDebug, verifyAccessAssertion } from '../../utils/access'
+import { resolveEmailByCommonNameDebug, verifyAccessAssertionDebug } from '../../utils/access'
 // TEMP DEBUG：原本是 import { resolveEmailByCommonName, verifyAccessAssertion }，
-// 找到問題後記得改回來（同時可以把 access.ts 裡的 resolveEmailByCommonNameDebug 刪掉）。
+// 找到問題後記得改回來（同時可以把 access.ts 裡的 resolveEmailByCommonNameDebug、
+// verifyAccessAssertionDebug 這兩個函式刪掉）。
 import { signAccessToken, signRefreshToken, ACCESS_TOKEN_TTL_SECONDS, REFRESH_TOKEN_TTL_SECONDS } from '../../utils/jwt'
 import { ACCESS_TOKEN_COOKIE_NAME, REFRESH_TOKEN_COOKIE_NAME, buildAppCookie } from '../../utils/cookie'
+
+// TEMP DEBUG：統一組出「401 + 除錯原因」的 Response，找到問題後這個函式可以整個刪掉。
+function unauthorizedDebug(reason: string): Response {
+  return new Response(JSON.stringify({ error: 'Unauthorized', debug: reason }), {
+    status: 401,
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
 
 export const onRequest: PagesFunction<Env, any, AuthContext> = async (context) => {
   const { env, request } = context
@@ -31,18 +40,24 @@ export const onRequest: PagesFunction<Env, any, AuthContext> = async (context) =
   }
 
   if (!env.APP_JWT_SECRET) {
-    console.error('[auth] 缺少環境變數 APP_JWT_SECRET')
-    return new Response('Unauthorized', { status: 401 })
+    // TEMP DEBUG：原本是 console.error(...) + return new Response('Unauthorized', { status: 401 })
+    return unauthorizedDebug('缺少環境變數 APP_JWT_SECRET')
   }
 
   const assertion = request.headers.get('Cf-Access-Jwt-Assertion')
   if (!assertion) {
-    return new Response('Unauthorized', { status: 401 })
+    // TEMP DEBUG：原本是 return new Response('Unauthorized', { status: 401 })
+    return unauthorizedDebug('請求沒有帶 Cf-Access-Jwt-Assertion header（代表沒有經過 Cloudflare Access edge，或 Access Application 設定成 Bypass 了這條路徑）')
   }
 
-  const commonName = await verifyAccessAssertion(env, assertion)
+  // TEMP DEBUG：原本是
+  //   const commonName = await verifyAccessAssertion(env, assertion)
+  //   if (!commonName) {
+  //     return new Response('Unauthorized', { status: 401 })
+  //   }
+  const { commonName, reason: commonNameFailReason } = await verifyAccessAssertionDebug(env, assertion)
   if (!commonName) {
-    return new Response('Unauthorized', { status: 401 })
+    return unauthorizedDebug(commonNameFailReason ?? '未知原因')
   }
 
   // TEMP DEBUG：暫時把失敗原因回傳到前端方便除錯，找到問題後記得改回：
@@ -52,15 +67,13 @@ export const onRequest: PagesFunction<Env, any, AuthContext> = async (context) =
   //   }
   const { email, reason } = resolveEmailByCommonNameDebug(env.SERVICE_IDENTITY_MAP, commonName)
   if (!email) {
-    return new Response(JSON.stringify({ error: 'Unauthorized', debug: reason }), {
-      status: 401,
-      headers: { 'Content-Type': 'application/json' },
-    })
+    return unauthorizedDebug(reason ?? '未知原因')
   }
 
   const user = await getByEmail(env.DB, email)
   if (!user) {
-    return new Response('Unauthorized', { status: 401 })
+    // TEMP DEBUG：原本是 return new Response('Unauthorized', { status: 401 })
+    return unauthorizedDebug(`email "${email}" 沒有在 users 表裡找到對應的使用者`)
   }
 
   const identity = { email, userId: user.id }

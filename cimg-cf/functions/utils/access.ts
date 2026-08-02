@@ -41,6 +41,43 @@ export async function verifyAccessAssertion(
 }
 
 /**
+ * TEMP DEBUG（除錯用，找到問題後記得刪除這個函式，login.ts 改回呼叫
+ * 上面的 verifyAccessAssertion）：
+ * 邏輯跟 verifyAccessAssertion 完全一樣，差別是失敗時會多回傳具體原因
+ * （包含原本被 `catch {}` 吞掉的錯誤訊息，例如簽章驗證失敗、aud 不符等）。
+ */
+export async function verifyAccessAssertionDebug(
+  env: Pick<Env, 'ACCESS_TEAM_DOMAIN' | 'ACCESS_AUD'>,
+  assertion: string,
+): Promise<{ commonName: string | null; reason?: string }> {
+  if (!env.ACCESS_TEAM_DOMAIN || !env.ACCESS_AUD) {
+    return { commonName: null, reason: '缺少環境變數 ACCESS_TEAM_DOMAIN 或 ACCESS_AUD' }
+  }
+
+  try {
+    const jwks = createRemoteJWKSet(
+      new URL(`https://${env.ACCESS_TEAM_DOMAIN}/cdn-cgi/access/certs`),
+    )
+    const { payload } = await jwtVerify(assertion, jwks, {
+      issuer: `https://${env.ACCESS_TEAM_DOMAIN}`,
+      audience: env.ACCESS_AUD,
+    })
+    if (typeof payload.common_name !== 'string' || !payload.common_name) {
+      return {
+        commonName: null,
+        reason: `Cf-Access-Jwt-Assertion 驗證通過，但 payload 沒有 common_name 欄位（payload keys: ${Object.keys(payload).join(', ')}）`,
+      }
+    }
+    return { commonName: payload.common_name }
+  } catch (err) {
+    return {
+      commonName: null,
+      reason: `Cf-Access-Jwt-Assertion 驗證失敗：${err instanceof Error ? err.message : String(err)}（常見原因：ACCESS_TEAM_DOMAIN 或 ACCESS_AUD 值填錯、assertion 過期、或這個 token 不屬於這個 Access Application）`,
+    }
+  }
+}
+
+/**
  * 用 common_name 查 SERVICE_IDENTITY_MAP 對照表（JSON 字串，common_name → email），
  * 找出對應 email；查不到、對照表沒設定、或不是合法 JSON 一律回傳 null。
  */
